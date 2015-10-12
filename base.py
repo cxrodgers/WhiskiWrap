@@ -8,6 +8,7 @@ import tables
 import trace
 import re
 import datetime 
+import errno
 
 class WhiskerSeg(tables.IsDescription):
     time = tables.UInt32Col()
@@ -17,7 +18,7 @@ class WhiskerSeg(tables.IsDescription):
     fol_x = tables.Float32Col()
     fol_y = tables.Float32Col()
     pixlen = tables.UInt16Col()
-    chunk_label = tables.UInt16Col()
+    chunk_start = tables.UInt16Col()
 
 def write_chunk(chunk, chunkname):
     tifffile.imsave(chunkname, chunk, compress=0)
@@ -59,7 +60,7 @@ def setup_hdf5(h5_filename, expectedrows):
     h5file.close()
     
 def append_whiskers_to_hdf5(whisk_filename, h5_filename, 
-    chunk_label, verbose=True,
+    chunk_start, verbose=True,
     flush_interval=100000, truncate_seg=None):
     """Load data from whisk_file and put it into an hdf5 file
     
@@ -103,8 +104,8 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename,
         wseg = trace.Whisker_Seg(cws)
 
         # Write to the table
-        h5seg['chunk_label'] = chunk_label
-        h5seg['time'] = wseg.time
+        h5seg['chunk_start'] = chunk_start
+        h5seg['time'] = wseg.time + chunk_start
         h5seg['id'] = wseg.id
         h5seg['fol_x'] = wseg.x[0]
         h5seg['fol_y'] = wseg.y[0]
@@ -446,9 +447,25 @@ def pipeline_trace(input_vfile, h5_filename,
         pool = multiprocessing.Pool(n_trace_processes)
         pool.map(trace_chunk, chunk_names)
 
+        #~ # fill up the pool
+        #~ for chunk_name in chunk_names:
+            #~ pool.apply_async(trace_chunk, (chunk_name,))
+        #~ pool.close()
+        
+        #~ # some funky code to make it work with ipython ctrl+c
+        #~ notintr = False
+        #~ while not notintr:
+            #~ try:
+                #~ pool.join()
+                #~ notintr = True
+            #~ except OSError, ose:
+                #~ if ose.errno != errno.EINTR:
+                    #~ raise ose
+
+
         # stitch
         print "Stitching"
-        for n_chunk, chunk_name in enumerate(chunk_names):
+        for chunk_start, chunk_name in zip(chunk_starts, chunk_names):
             append_whiskers_to_hdf5(chunk_name + '.whiskers', 
-                h5_filename, chunk_label=n_chunk, verbose=True,
+                h5_filename, chunk_start=chunk_start, verbose=True,
                 flush_interval=flush_interval)

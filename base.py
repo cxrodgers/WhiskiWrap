@@ -20,18 +20,29 @@ class WhiskerSeg(tables.IsDescription):
     pixlen = tables.UInt16Col()
     chunk_start = tables.UInt16Col()
 
-def write_chunk(chunk, chunkname):
-    tifffile.imsave(chunkname, chunk, compress=0)
+def write_chunk(chunk, chunkname, directory='.'):
+    tifffile.imsave(os.path.join(directory, chunkname), chunk, compress=0)
 
 def trace_chunk(chunk_name):
     print "Starting", chunk_name
-    command = ['trace', chunk_name, chunk_name + '.whiskers']
-    pipe = subprocess.Popen(command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        )
-    stdout, stderr = pipe.communicate()  
+    orig_dir = os.getcwd()
+    run_dir, raw_filename = os.path.split(os.path.abspath(chunk_name))
+    command = ['trace', raw_filename, raw_filename + '.whiskers']
+
+    os.chdir(run_dir)
+    try:
+        pipe = subprocess.Popen(command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            )
+        stdout, stderr = pipe.communicate()  
+    except:
+        raise
+    finally:
+        os.chdir(orig_dir)
     print "Done", chunk_name
+    print stdout
+    print stderr
 
 
 def setup_hdf5(h5_filename, expectedrows):
@@ -406,6 +417,9 @@ def pipeline_trace(input_vfile, h5_filename,
     n_trace_processes : how many simultaneous processes to use for tracing
     expectedrows, flush_interval : used to set up hdf5 file
     """
+    # Figure out where to store temporary data
+    input_vfile = os.path.abspath(input_vfile)
+    input_dir = os.path.split(input_vfile)[0]    
 
     # Setup the result file
     setup_hdf5(h5_filename, expectedrows)
@@ -443,32 +457,17 @@ def pipeline_trace(input_vfile, h5_filename,
             chunkstart = n_whiski_chunk * chunk_sz_frames
             chunkstop = (n_whiski_chunk + 1) * chunk_sz_frames
             chunk = frames[chunkstart:chunkstop]
-            write_chunk(chunk, chunk_name)
+            write_chunk(chunk, chunk_name, input_dir)
         
         # Also write lossless and/or lossy monitor video here?
         # would really only be useful if cropping applied
 
         # trace each
         print "Tracing"
-        pool = multiprocessing.Pool(n_trace_processes)
-        pool.map(trace_chunk, chunk_names)
+        pool = multiprocessing.Pool(n_trace_processes)        
+        pool.map(trace_chunk, [os.path.join(input_dir, chunk_name)
+            for chunk_name in chunk_names])
         pool.close()
-
-        #~ # fill up the pool
-        #~ for chunk_name in chunk_names:
-            #~ pool.apply_async(trace_chunk, (chunk_name,))
-        #~ pool.close()
-        
-        #~ # some funky code to make it work with ipython ctrl+c
-        #~ notintr = False
-        #~ while not notintr:
-            #~ try:
-                #~ pool.join()
-                #~ notintr = True
-            #~ except OSError, ose:
-                #~ if ose.errno != errno.EINTR:
-                    #~ raise ose
-
 
         # stitch
         print "Stitching"
@@ -477,12 +476,19 @@ def pipeline_trace(input_vfile, h5_filename,
                 #~ h5_filename, chunk_start=chunk_start, verbose=True,
                 #~ flush_interval=flush_interval)
 
+            # Try to put this in its own process so that it releases
+            # its memory leak upon completion
             proc = multiprocessing.Process(
                 target=append_whiskers_to_hdf5,
-                kwargs={'whisk_filename': chunk_name + '.whiskers',
+                kwargs={
+                    'whisk_filename': os.path.join(
+                        input_dir, chunk_name + '.whiskers'),
                     'h5_filename': h5_filename,
                     'chunk_start': chunk_start,
                     'flush_interval': flush_interval})
             proc.start()
             proc.join()
+            
+            if proc.exitcode != 0:
+                1/0
 

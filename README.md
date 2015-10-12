@@ -6,6 +6,7 @@ This module provides tools for making whiski (whiskertracking.janelia.org) more 
 Some of the main issues with whiski are:
 1) Very particular about the input file format. I think this is because it relies on libav. I have found that it can only read files encoded with mpeg4 or tiff stacks. mpeg4 is not an ideal codec because it does not support lossless encoding and is quite large.
 2) Not parallelized, so tracing takes a very long time.
+3) The output file formats (.whiskers, .measurements) do not reliably transfer between operating systems.
 
 The key idea of WhiskiWrap is to split the input video into many smaller chunks, run whiski on each chunk, and stitch the results together. This means that we can give whiski exactly the format that it wants and parallelize its running.
 
@@ -20,3 +21,11 @@ Overall flow:
    d) Combine the results of each chunk into an HDF5 file
    e) (Optional) delete the intermediate chunk files here
 3) Finally we combine the results from each epoch.
+
+
+Requirements:
+ffmpeg
+conda create -n whiski_wrap python=2.7 pip numpy matplotlib pyqt tables pandas ipython
+pip install tifffile
+git clone WhiskiWrap
+echo "/home/chris/dev" > ~/.local/lib/python2.7/site-packages/chris.pth

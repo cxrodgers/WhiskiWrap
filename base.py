@@ -5,7 +5,7 @@ import numpy as np
 import subprocess
 import multiprocessing
 import tables
-import trace
+from whisk.python import trace
 import re
 import datetime 
 import errno
@@ -68,9 +68,7 @@ def setup_hdf5(h5_filename, expectedrows):
     
     h5file.close()
     
-def append_whiskers_to_hdf5(whisk_filename, h5_filename, 
-    chunk_start,
-    flush_interval=100000, truncate_seg=None):
+def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
     """Load data from whisk_file and put it into an hdf5 file
     
     The HDF5 file will have two basic components:
@@ -80,8 +78,6 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename,
         /pixels_x : A vlarray of the same length as summary but with the
             entire array of x-coordinates of each segment.
         /pixels_y : Same but for y-coordinates
-    
-    truncate_seg : for debugging, stop after this many segments
     """
     ## Load it, so we know what expectedrows is
     # This loads all whisker info into C data types
@@ -90,9 +86,9 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename,
     # a python object via: wseg = trace.Whisker_Seg(wv[idx])
     # The python object responds to .time and .id (integers) and .x and .y (numpy
     # float arrays).
-    wv, nwhisk = trace.Debug_Load_Whiskers(whisk_filename)
-    if truncate_seg is not None:
-        nwhisk = truncate_seg
+    #wv, nwhisk = trace.Debug_Load_Whiskers(whisk_filename)
+    whiskers = trace.Load_Whiskers(whisk_filename)
+    nwhisk = np.sum(map(len, whiskers.values()))
 
     # Open file
     h5file = tables.open_file(h5_filename, mode="a")
@@ -102,30 +98,23 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename,
     h5seg = table.row
     xpixels_vlarray = h5file.get_node('/pixels_x')
     ypixels_vlarray = h5file.get_node('/pixels_y')
-    for idx in range(nwhisk):
-        # Get the C object and convert to python
-        # I suspect this is the bottleneck in speed
-        cws = wv[idx]
-        wseg = trace.Whisker_Seg(cws)
-
-        # Write to the table
-        h5seg['chunk_start'] = chunk_start
-        h5seg['time'] = wseg.time + chunk_start
-        h5seg['id'] = wseg.id
-        h5seg['fol_x'] = wseg.x[0]
-        h5seg['fol_y'] = wseg.y[0]
-        h5seg['tip_x'] = wseg.x[-1]
-        h5seg['tip_y'] = wseg.y[-1]
-        h5seg['pixlen'] = len(wseg.x)
-        assert len(wseg.x) == len(wseg.y)
-        h5seg.append()
-        
-        # Write x
-        xpixels_vlarray.append(wseg.x)
-        ypixels_vlarray.append(wseg.y)
-
-        if np.mod(idx, flush_interval) == 0:
-            table.flush()
+    for frame, frame_whiskers in whiskers.iteritems():
+        for whisker_id, wseg in frame_whiskers.iteritems():
+            # Write to the table
+            h5seg['chunk_start'] = chunk_start
+            h5seg['time'] = wseg.time + chunk_start
+            h5seg['id'] = wseg.id
+            h5seg['fol_x'] = wseg.x[0]
+            h5seg['fol_y'] = wseg.y[0]
+            h5seg['tip_x'] = wseg.x[-1]
+            h5seg['tip_y'] = wseg.y[-1]
+            h5seg['pixlen'] = len(wseg.x)
+            assert len(wseg.x) == len(wseg.y)
+            h5seg.append()
+            
+            # Write x
+            xpixels_vlarray.append(wseg.x)
+            ypixels_vlarray.append(wseg.y)
 
     table.flush()
     h5file.close()    
@@ -485,11 +474,10 @@ def pipeline_trace(input_vfile, h5_filename,
                     'whisk_filename': os.path.join(
                         input_dir, chunk_name + '.whiskers'),
                     'h5_filename': h5_filename,
-                    'chunk_start': chunk_start,
-                    'flush_interval': flush_interval})
+                    'chunk_start': chunk_start})
             proc.start()
             proc.join()
             
             if proc.exitcode != 0:
-                raise CalledProcessError("some issue with stitching")
+                raise RuntimeError("some issue with stitching")
 

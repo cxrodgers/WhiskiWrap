@@ -60,7 +60,7 @@ def setup_hdf5(h5_filename, expectedrows):
     h5file.close()
     
 def append_whiskers_to_hdf5(whisk_filename, h5_filename, 
-    chunk_start, verbose=True,
+    chunk_start,
     flush_interval=100000, truncate_seg=None):
     """Load data from whisk_file and put it into an hdf5 file
     
@@ -94,10 +94,6 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename,
     xpixels_vlarray = h5file.get_node('/pixels_x')
     ypixels_vlarray = h5file.get_node('/pixels_y')
     for idx in range(nwhisk):
-        # Announce
-        if verbose and np.mod(idx, 10000) == 0:
-            print idx
-
         # Get the C object and convert to python
         # I suspect this is the bottleneck in speed
         cws = wv[idx]
@@ -400,6 +396,16 @@ def pipeline_trace(input_vfile, h5_filename,
     frame_start=0, frame_stop=None,
     n_trace_processes=4, expectedrows=1000000, flush_interval=100000,
     ):
+    """Trace a video file using a chunked strategy.
+    
+    input_vfile : input video filename
+    h5_filename : output HDF5 file
+    epoch_sz_frames : Video is first broken into epochs of this length
+    chunk_sz_frames : Each epoch is broken into chunks of this length
+    frame_start, frame_stop : where to start and stop processing
+    n_trace_processes : how many simultaneous processes to use for tracing
+    expectedrows, flush_interval : used to set up hdf5 file
+    """
 
     # Setup the result file
     setup_hdf5(h5_filename, expectedrows)
@@ -446,6 +452,7 @@ def pipeline_trace(input_vfile, h5_filename,
         print "Tracing"
         pool = multiprocessing.Pool(n_trace_processes)
         pool.map(trace_chunk, chunk_names)
+        pool.close()
 
         #~ # fill up the pool
         #~ for chunk_name in chunk_names:
@@ -466,6 +473,16 @@ def pipeline_trace(input_vfile, h5_filename,
         # stitch
         print "Stitching"
         for chunk_start, chunk_name in zip(chunk_starts, chunk_names):
-            append_whiskers_to_hdf5(chunk_name + '.whiskers', 
-                h5_filename, chunk_start=chunk_start, verbose=True,
-                flush_interval=flush_interval)
+            #~ append_whiskers_to_hdf5(chunk_name + '.whiskers', 
+                #~ h5_filename, chunk_start=chunk_start, verbose=True,
+                #~ flush_interval=flush_interval)
+
+            proc = multiprocessing.Process(
+                target=append_whiskers_to_hdf5,
+                kwargs={'whisk_filename': chunk_name + '.whiskers',
+                    'h5_filename': h5_filename,
+                    'chunk_start': chunk_start,
+                    'flush_interval': flush_interval})
+            proc.start()
+            proc.join()
+

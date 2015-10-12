@@ -491,5 +491,5 @@ def pipeline_trace(input_vfile, h5_filename,
             proc.join()
             
             if proc.exitcode != 0:
-                1/0
+                raise CalledProcessError("some issue with stitching")
 

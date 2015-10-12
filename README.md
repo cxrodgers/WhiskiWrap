@@ -25,7 +25,10 @@ Overall flow:
 
 Requirements:
 ffmpeg
+pip uninstall numpy
 conda create -n whiski_wrap python=2.7 pip numpy matplotlib pyqt tables pandas ipython
+source activate whiski_wrap
 pip install tifffile
 git clone WhiskiWrap
 echo "/home/chris/dev" > ~/.local/lib/python2.7/site-packages/chris.pth
+

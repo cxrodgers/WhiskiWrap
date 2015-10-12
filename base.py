@@ -1,11 +1,13 @@
 import tifffile
 import os
-import my
+#~ import my
 import numpy as np
 import subprocess
 import multiprocessing
 import tables
 import trace
+import re
+import datetime 
 
 class WhiskerSeg(tables.IsDescription):
     time = tables.UInt32Col()
@@ -88,6 +90,8 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename,
     ## Iterate over rows and store
     table = h5file.get_node('/summary')
     h5seg = table.row
+    xpixels_vlarray = h5file.get_node('/pixels_x')
+    ypixels_vlarray = h5file.get_node('/pixels_y')
     for idx in range(nwhisk):
         # Announce
         if verbose and np.mod(idx, 10000) == 0:
@@ -122,7 +126,7 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename,
 
 def process_chunks_of_video(filename, 
     frame_start=None, frame_stop=None, n_frames=None, frame_rate=None,
-    frame_func, chunk_func, 
+    frame_func=None, chunk_func=None, 
     image_w=None, image_h=None,
     verbose=False,
     frames_per_chunk=1000, bufsize=10**9,
@@ -185,9 +189,11 @@ def process_chunks_of_video(filename,
             n_frames = np.inf
         else:
             frame_stop = n_frames - frame_start
+    if n_frames is None:
+        n_frames = frame_stop - frame_start
+    assert n_frames == frame_stop - frame_start
     if frame_stop < frame_start:
         raise ValueError("frame start cannot be greater than frame stop")
-    assert n_frames == frame_stop - frame_start
     
     # Set up pix_fmt
     if pix_fmt == 'gray':
@@ -234,10 +240,10 @@ def process_chunks_of_video(filename,
             if verbose:
                 print frames_read
             # Figure out how much to acquire
-            if frames_read + frame_chunk_sz > n_frames:
+            if frames_read + frames_per_chunk > n_frames:
                 this_chunk = n_frames - frames_read
             else:
-                this_chunk = frame_chunk_sz
+                this_chunk = frames_per_chunk
             
             # Read this_chunk, or as much as we can
             raw_image = pipe.stdout.read(read_size_per_frame * this_chunk)
@@ -389,11 +395,10 @@ def get_video_duration(video_filename, return_as_timedelta=False):
         return video_duration.total_seconds()
 
 def pipeline_trace(input_vfile, h5_filename,
-    epoch_sz_frames=100000,
-    chunk_sz_frames=1000, 
+    epoch_sz_frames=100000, chunk_sz_frames=1000, 
     frame_start=0, frame_stop=None,
     n_trace_processes=4, expectedrows=1000000, flush_interval=100000,
-    start_frame=None):
+    ):
 
     # Setup the result file
     setup_hdf5(h5_filename, expectedrows)
@@ -418,7 +423,7 @@ def pipeline_trace(input_vfile, h5_filename,
         # read everything
         # need to be able to crop here
         print "Reading"
-        frames = my.video.process_chunks_of_video(input_vfile, 
+        frames = process_chunks_of_video(input_vfile, 
             frame_start=start_epoch, frame_stop=stop_epoch,
             frames_per_chunk=chunk_sz_frames, # only necessary for chunk_func
             frame_func=None, chunk_func=None,
@@ -428,8 +433,8 @@ def pipeline_trace(input_vfile, h5_filename,
         print "Writing"
         for n_whiski_chunk, chunk_name in enumerate(chunk_names):
             print n_whiski_chunk
-            chunkstart = n_whiski_chunk * whiski_chunk_sz
-            chunkstop = (n_whiski_chunk + 1) * whiski_chunk_sz
+            chunkstart = n_whiski_chunk * chunk_sz_frames
+            chunkstop = (n_whiski_chunk + 1) * chunk_sz_frames
             chunk = frames[chunkstart:chunkstop]
             write_chunk(chunk, chunk_name)
         
@@ -438,11 +443,8 @@ def pipeline_trace(input_vfile, h5_filename,
 
         # trace each
         print "Tracing"
-        #~ for n_whiski_chunk, chunk_name in enumerate(chunk_names):
-            #~ print chunk_name
-            #~ trace_chunk(chunk_name)
-        #~ pool = multiprocessing.Pool(n_trace_processes)
-        #~ pool.map(trace_chunk, chunk_names)
+        pool = multiprocessing.Pool(n_trace_processes)
+        pool.map(trace_chunk, chunk_names)
 
         # stitch
         print "Stitching"

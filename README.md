@@ -32,3 +32,24 @@ pip install tifffile
 git clone WhiskiWrap
 echo "/home/chris/dev" > ~/.local/lib/python2.7/site-packages/chris.pth
 
+Installing whiski:
+Option 1: Build from source. Requires various dependencies (gl.h) to build so could be troublesome.
+Once it is built, we need to make the python files into modules so we can import them.
+cd ~/dev
+git clone https://github.com/cxrodgers/whisk.git # already made modules
+cd whisk
+mkdir build
+cmake ..
+make
+And we need to copy a library into an expected location
+cp ~/dev/whisk/build/libwhisk.so ~/dev/whisk/python
+Hopefully this directory should be above the built-in trace
+
+Option 2: Pre-built binary
+The problem with this way is that we don't have access to my changes, which is only useful for Debug_Load_whiskers and __init__ stuff
+So, install binary to folder ~/whisk-1.1.0d-Linux
+But then we need to make it a module so that we can import the python files
+touch ~/whisk-1.1.0d-Linux/share/whisk/__init__.py
+touch ~/whisk-1.1.0d-Linux/share/whisk/python/__init__.py
+echo "/home/chris/whisk-1.1.0d-Linux/share" >> ~/.local/lib/python2.7/site-packages/chris.pth
+Now we can: from whisk.python import traj, trace

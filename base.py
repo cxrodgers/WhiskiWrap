@@ -202,10 +202,9 @@ def process_chunks_of_video(filename,
     read_size_per_frame = bytes_per_pixel * image_w * image_h
     
     # ffmpeg requires start time and total time to be in seconds, not frames
-    if frame_rate is None:
-        frame_rate = get_frame_rate(filename)
-    start_frame_time = frame_start / float(frame_rate)
-    total_time = n_frames / float(frame_rate)
+    # Add 10% of a frame so that it will round down to the correct frame
+    start_frame_time = (frame_start + 0.1) / float(frame_rate)
+    total_time = (n_frames + 0.1) / float(frame_rate)
     
     # Create the command
     command = ['ffmpeg', 
@@ -290,7 +289,9 @@ def process_chunks_of_video(filename,
         stdout, stderr = pipe.communicate()
 
     if frames_read != n_frames:
-        print "warning: did not read the correct number of frames"
+        # This usually happens when there's some rounding error in the frame
+        # times
+        raise ValueError("did not read the correct number of frames")
 
     # Stick chunks together
     if len(res_l) == 0:

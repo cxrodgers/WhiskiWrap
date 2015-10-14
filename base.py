@@ -11,6 +11,69 @@ import datetime
 import errno
 
 
+class FileNamer(object):
+    """Defines the naming convention for whiski-related files.
+    
+    This can be initialized from a basename, such as:
+        fn = FileNamer('~/my_directory/session_name')
+    or from an existing video file or whiskers file, such as:
+        fn = FileNamer.from_whiskers('~/my_directory/session_name.whiskers')
+    In the latter case a warning is issued if no such file exists, or if it
+    does not follow the typical naming convention.
+    
+    Once initialized, this object generates names:
+        fn.whiskers
+        fn.tiff_stack
+        fn.video(type='mp4')
+    """
+    def __init__(self, basename):
+        """Initialize based on full path and filename (without extension)."""
+        self.basename = os.path.abspath(os.path.expanduser(basename))
+    
+    def video(self, typ='tif'):
+        return self.basename + '.' + typ
+    
+    @property
+    def tiff_stack(self):
+        """Returns the name for the tiff stack"""
+        return self.video('tif')
+    
+    @property
+    def whiskers(self):
+        """Return the name for the whiskers file"""
+        return self.basename + '.whiskers'
+    
+    @classmethod
+    def from_video(self, video_name):
+        """Generates FileNamer based on an existing video name"""
+        if not os.path.exists(video_name):
+            print "warning: nonexistent video %s" % video_name
+        basename, ext = os.path.splitext(video_name)
+        if ext not in ['.mp4', '.avi', '.mkv', '.tif']:
+            print "warning: %s does not appear to be a video file" % video_name
+        return FileNamer(basename)
+
+    @classmethod
+    def from_whiskers(self, whiskers_file_name):
+        """Generates FileNamer based on an existing whiskers file"""
+        if not os.path.exists(whiskers_file_name):
+            print "warning: nonexistent whiskers file %s" % whiskers_file_name        
+        basename, ext = os.path.splitext(whiskers_file_name)
+        if ext != '.whiskers':
+            raise ValueError("%s is not a whiskers file" % whiskers_file_name)
+        return FileNamer(basename)       
+
+    @classmethod
+    def from_tiff_stack(self, tiff_stack_filename):
+        """Generates FileNamer based on an existing tiff stack"""
+        if not os.path.exists(tiff_stack_filename):
+            print "warning: nonexistent tiff stack %s" % tiff_stack_filename        
+        basename, ext = os.path.splitext(tiff_stack_filename)
+        if ext != '.tif':
+            raise ValueError("%s is not a *.tif stack" % whiskers_file_name)
+        return FileNamer(basename)          
+
+
 def probe_command_availability(cmd):
     """Try to run 'cmd' in a subprocess and return availability.
     
@@ -83,8 +146,10 @@ def write_chunk(chunk, chunkname, directory='.'):
 def trace_chunk(chunk_name):
     print "Starting", chunk_name
     orig_dir = os.getcwd()
-    run_dir, raw_filename = os.path.split(os.path.abspath(chunk_name))
-    command = ['trace', raw_filename, raw_filename + '.whiskers']
+    fn = FileNamer.from_tiff_stack(chunk_name)
+    run_dir, raw_tiff_stack = os.path.split(fn.tiff_stack)
+    whiskers_file = fn.whiskers
+    command = ['trace', raw_tiff_stack, whiskers_file]
 
     os.chdir(run_dir)
     try:
@@ -99,7 +164,7 @@ def trace_chunk(chunk_name):
         os.chdir(orig_dir)
     print "Done", chunk_name
     
-    if not os.path.exists(os.path.join(run_dir, raw_filename + '.whiskers')):
+    if not os.path.exists(whiskers_file):
         print raw_filename
         raise IOError("tracing seems to have failed")
     
@@ -532,9 +597,9 @@ def pipeline_trace(input_vfile, h5_filename,
         print "Stitching"
         for chunk_start, chunk_name in zip(chunk_starts, chunk_names):
             # Append each chunk to the hdf5 file
+            fn = FileNamer.from_tiff_stack(os.path.join(input_dir, chunk_name))
             append_whiskers_to_hdf5(
-                whisk_filename=os.path.join(input_dir, 
-                    chunk_name + '.whiskers'), 
+                whisk_filename=fn.whiskers,
                 h5_filename=h5_filename, 
                 chunk_start=chunk_start)
 

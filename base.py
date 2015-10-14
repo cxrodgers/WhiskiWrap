@@ -10,6 +10,63 @@ import re
 import datetime 
 import errno
 
+
+def probe_command_availability(cmd):
+    """Try to run 'cmd' in a subprocess and return availability.
+    
+    'cmd' should be provided in the format expected by subprocess: a string,
+    or a list of strings if multiple arguments.
+    
+    Raises RuntimeError if the called process crashes (eg, via Ctrl+C)
+    
+    Returns:
+        command_available, stdout, stderr
+    
+    stdout and stderr will be '' if command was not available.
+    """
+    # Try to initialize a pipe which will only work if it is available
+    command_available = True
+    try:
+        # If it fails here due to nonexistence of command, pipe is
+        # never initialized
+        pipe = subprocess.Popen(cmd, 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except OSError:
+        return False, '', ''
+    
+    # This extract data from the pipe
+    # I think this will always work?
+    try:
+        stdout, stderr = pipe.communicate()
+    except:
+        raise RuntimeError("process crashed")
+    
+    # Try to terminate it if it didn't already happen
+    # Add some point it seemed this was necessary to restored stdout
+    # but this no longer seems to be the case
+    try:
+        pipe.terminate()
+    except OSError:
+        pass
+    
+    return command_available, stdout, stderr
+
+def probe_needed_commands():
+    """Test whether we have the commands we need.
+    
+    ffmpeg
+    trace
+    """
+    ffmpeg_av = probe_command_availability('ffmpeg')
+    if not ffmpeg_av[0]:
+        raise OSError("'ffmpeg' is not available on the system path")    
+    if 'the FFmpeg developers' not in ffmpeg_av[2].split('\n')[0]:
+        print "warning: libav ffmpeg appears to be installed"
+    
+    trace_av = probe_command_availability('trace')
+    if not trace_av[0]:
+        raise OSError("'trace' is not available on the system path")
+
 class WhiskerSeg(tables.IsDescription):
     time = tables.UInt32Col()
     id = tables.UInt16Col()
@@ -407,6 +464,8 @@ def pipeline_trace(input_vfile, h5_filename,
     n_trace_processes : how many simultaneous processes to use for tracing
     expectedrows, flush_interval : used to set up hdf5 file
     """
+    probe_needed_commands()
+    
     # Figure out where to store temporary data
     input_vfile = os.path.abspath(input_vfile)
     input_dir = os.path.split(input_vfile)[0]    

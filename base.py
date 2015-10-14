@@ -99,6 +99,10 @@ def trace_chunk(chunk_name):
         os.chdir(orig_dir)
     print "Done", chunk_name
     
+    if not os.path.exists(os.path.join(run_dir, raw_filename + '.whiskers')):
+        print raw_filename
+        raise IOError("tracing seems to have failed")
+    
     return stdout, stderr
 
 
@@ -491,7 +495,7 @@ def pipeline_trace(input_vfile, h5_filename,
         
         # Chunks
         chunk_starts = np.arange(start_epoch, stop_epoch, chunk_sz_frames)
-        chunk_names = ['chunk%08d.tiff' % nframe for nframe in chunk_starts]
+        chunk_names = ['chunk%08d.tif' % nframe for nframe in chunk_starts]
     
         # read everything
         # need to be able to crop here

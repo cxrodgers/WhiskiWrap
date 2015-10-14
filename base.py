@@ -41,6 +41,8 @@ def trace_chunk(chunk_name):
     finally:
         os.chdir(orig_dir)
     print "Done", chunk_name
+    
+    return stdout, stderr
 
 
 def setup_hdf5(h5_filename, expectedrows):
@@ -448,6 +450,8 @@ def pipeline_trace(input_vfile, h5_filename,
             chunkstart = n_whiski_chunk * chunk_sz_frames
             chunkstop = (n_whiski_chunk + 1) * chunk_sz_frames
             chunk = frames[chunkstart:chunkstop]
+            if len(chunk) == 3:
+                print "WARNING: trace will fail on tiff stacks of length 3"
             write_chunk(chunk, chunk_name, input_dir)
         
         # Also write lossless and/or lossy monitor video here?
@@ -456,29 +460,33 @@ def pipeline_trace(input_vfile, h5_filename,
         # trace each
         print "Tracing"
         pool = multiprocessing.Pool(n_trace_processes)        
-        pool.map(trace_chunk, [os.path.join(input_dir, chunk_name)
-            for chunk_name in chunk_names])
+        trace_res = pool.map(trace_chunk, 
+            [os.path.join(input_dir, chunk_name)
+                for chunk_name in chunk_names])
         pool.close()
 
         # stitch
         print "Stitching"
         for chunk_start, chunk_name in zip(chunk_starts, chunk_names):
-            #~ append_whiskers_to_hdf5(chunk_name + '.whiskers', 
-                #~ h5_filename, chunk_start=chunk_start, verbose=True,
-                #~ flush_interval=flush_interval)
+            # Append each chunk to the hdf5 file
+            append_whiskers_to_hdf5(
+                whisk_filename=os.path.join(input_dir, 
+                    chunk_name + '.whiskers'), 
+                h5_filename=h5_filename, 
+                chunk_start=chunk_start)
 
-            # Try to put this in its own process so that it releases
-            # its memory leak upon completion
-            proc = multiprocessing.Process(
-                target=append_whiskers_to_hdf5,
-                kwargs={
-                    'whisk_filename': os.path.join(
-                        input_dir, chunk_name + '.whiskers'),
-                    'h5_filename': h5_filename,
-                    'chunk_start': chunk_start})
-            proc.start()
-            proc.join()
+            #~ # Try to put this in its own process so that it releases
+            #~ # its memory leak upon completion
+            #~ proc = multiprocessing.Process(
+                #~ target=append_whiskers_to_hdf5,
+                #~ kwargs={
+                    #~ 'whisk_filename': os.path.join(
+                        #~ input_dir, chunk_name + '.whiskers'),
+                    #~ 'h5_filename': h5_filename,
+                    #~ 'chunk_start': chunk_start})
+            #~ proc.start()
+            #~ proc.join()
             
-            if proc.exitcode != 0:
-                raise RuntimeError("some issue with stitching")
+            #~ if proc.exitcode != 0:
+                #~ raise RuntimeError("some issue with stitching")
 

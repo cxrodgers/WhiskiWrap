@@ -450,8 +450,8 @@ def pipeline_trace(input_vfile, h5_filename,
             chunkstart = n_whiski_chunk * chunk_sz_frames
             chunkstop = (n_whiski_chunk + 1) * chunk_sz_frames
             chunk = frames[chunkstart:chunkstop]
-            if len(chunk) == 3:
-                print "WARNING: trace will fail on tiff stacks of length 3"
+            if len(chunk) in [3, 4]:
+                print "WARNING: trace will fail on tiff stacks of length 3 or 4"
             write_chunk(chunk, chunk_name, input_dir)
         
         # Also write lossless and/or lossy monitor video here?

@@ -750,3 +750,34 @@ def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False):
     test_results, durations = run_benchmarks(tests, test_root)
 
     return test_results, durations
+
+def run_offset_test(test_root='~/whiski_wrap_test', start=1525, offset=5,
+    n_frames=30, force=False):
+    probe_needed_commands()
+    
+    # Form test root
+    test_root = os.path.abspath(os.path.expanduser(test_root))
+    
+    # Get permission to use it
+    if not force:
+        response = raw_input('Run tests in %s? [y/N]: ' % test_root)
+        if response.upper() != 'Y':
+            raise ValueError("did not receive permission to run test")
+    
+    # Find the video to use
+    vfile1 = os.path.join(DIRECTORY, 'test_video2.mp4')
+
+    # Construct the tests
+    stop = start + n_frames
+    tests = pandas.DataFrame([
+        ['one_chunk', vfile1, start, stop, 100, 100, 1],
+        ['one_chunk_offset', vfile1, start + offset, stop, 100, 100, 1],
+        ],
+        columns=(
+            'name', 'input_video', 'frame_start', 'frame_stop', 
+            'epoch_sz_frames', 'chunk_sz_frames', 'n_trace_processes'))
+    
+    # Run the tests
+    test_results, durations = run_benchmarks(tests, test_root)
+
+    return test_results, durations

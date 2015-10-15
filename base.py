@@ -670,3 +670,46 @@ def setup_session_directory(directory, input_video, force=False):
         shutil.copyfile(filename, os.path.join(directory, raw_filename))
     
     return FileNamer.from_video(new_video_filename)
+
+def run_benchmarks(benchmark_params, test_root):
+    """Run the benchmarks
+    
+    For every row in benchmark params, run a trace on the input video
+    using the params specified.
+    
+    benchmark_params: DataFrame with columns corresponding to keywords
+        to pass to pipeline_trace. Should have columns 'name',
+        'input_video', 'chunk_sz_frames', 'epoch_sz_frames',
+        'frame_start', 'frame_stop', 'n_trace_processes', etc
+    
+    Returns:
+        test_results, durations
+        test_results : Dict from test['name'] to results read from hdf5 file
+        durations : list of durations taken
+    """
+    test_results = {}
+    durations = []    
+    for idx, test in benchmark_params.iterrows():
+        print test['name']
+        test_dir = os.path.expanduser(os.path.join(test_root, test['name']))
+        fn = WhiskiWrap.setup_session_directory(test_dir, test['input_video'])
+
+        # Run
+        start_time = time.time()
+        WhiskiWrap.pipeline_trace(
+            fn.video('mp4'),
+            fn.hdf5,
+            chunk_sz_frames=test['chunk_sz_frames'],
+            epoch_sz_frames=test['epoch_sz_frames'],
+            frame_start=test['frame_start'],
+            frame_stop=test['frame_stop'],
+            n_trace_processes=test['n_trace_processes'])
+        stop_time = time.time()
+        durations.append(stop_time - start_time)
+
+        # Get the summary
+        with tables.open_file(fn.hdf5) as fi:
+            test_results[test['name']] = pandas.DataFrame.from_records(
+                fi.root.summary.read()) 
+    
+    return test_results, durations

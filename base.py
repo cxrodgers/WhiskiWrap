@@ -72,7 +72,12 @@ class FileNamer(object):
         basename, ext = os.path.splitext(tiff_stack_filename)
         if ext != '.tif':
             raise ValueError("%s is not a *.tif stack" % whiskers_file_name)
-        return FileNamer(basename)          
+        return FileNamer(basename)       
+
+    @property
+    def hdf5(self):
+        """Return the name for the hdf5 file"""
+        return self.basename + '.hdf5'
 
 
 def probe_command_availability(cmd):
@@ -657,3 +662,5 @@ def setup_session_directory(directory, input_video, force=False):
     # Copy the parameter files in
     for filename in ['default.parameters', 'halfspace.detectorbank', 'line.detectorbank']:
         shutil.copyfile(filename, os.path.join(directory, filename))
+    
+    return FileNamer.from_video(new_video_filename)

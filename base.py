@@ -10,6 +10,8 @@ import re
 import datetime 
 import shutil
 import errno
+import time
+import pandas
 
 # Find the repo directory and the default param files
 DIRECTORY = os.path.split(__file__)[0]
@@ -692,11 +694,11 @@ def run_benchmarks(benchmark_params, test_root):
     for idx, test in benchmark_params.iterrows():
         print test['name']
         test_dir = os.path.expanduser(os.path.join(test_root, test['name']))
-        fn = WhiskiWrap.setup_session_directory(test_dir, test['input_video'])
+        fn = setup_session_directory(test_dir, test['input_video'])
 
         # Run
         start_time = time.time()
-        WhiskiWrap.pipeline_trace(
+        pipeline_trace(
             fn.video('mp4'),
             fn.hdf5,
             chunk_sz_frames=test['chunk_sz_frames'],

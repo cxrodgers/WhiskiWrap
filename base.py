@@ -655,8 +655,7 @@ def setup_session_directory(directory, input_video, force=False):
         if not force:
             confirm = raw_input('Ok to erase %s? [y/N]: ' % directory)
             if confirm.upper() != 'Y':
-                print "aborting"
-                return
+                raise ValueError("did not receive permission to setup test")
         
         # Erase
         os.system('rm -rf %s' % directory)
@@ -689,6 +688,8 @@ def run_benchmarks(benchmark_params, test_root):
         test_results : Dict from test['name'] to results read from hdf5 file
         durations : list of durations taken
     """
+    probe_needed_commands()
+    
     test_results = {}
     durations = []    
     for idx, test in benchmark_params.iterrows():
@@ -714,4 +715,38 @@ def run_benchmarks(benchmark_params, test_root):
             test_results[test['name']] = pandas.DataFrame.from_records(
                 fi.root.summary.read()) 
     
+    return test_results, durations
+
+def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False):
+    """Run a suite of standard benchmarks.
+    
+    Gets files from repo. Sets standard params.
+    Calls run_benchmarks on the results
+    """
+    probe_needed_commands()
+    
+    # Form test root
+    test_root = os.path.abspath(os.path.expanduser(test_root))
+    
+    # Get permission to use it
+    if not force:
+        response = raw_input('Run tests in %s? [y/N]: ' % test_root)
+        if response.upper() != 'Y':
+            raise ValueError("did not receive permission to run test")
+    
+    # Find the video to use
+    vfile1 = os.path.join(DIRECTORY, 'test_video_50s.mp4')
+    
+    # Construct the tests
+    tests = pandas.DataFrame([
+        ['one_chunk', vfile1, 0, 10, 100, 100, 1],
+        ['one_chunk_offset', vfile1, 2, 10, 100, 100, 1],
+        ],
+        columns=(
+            'name', 'input_video', 'frame_start', 'frame_stop', 
+            'epoch_sz_frames', 'chunk_sz_frames', 'n_trace_processes'))
+
+    # Run the tests
+    test_results, durations = run_benchmarks(tests, test_root)
+
     return test_results, durations

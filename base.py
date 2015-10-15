@@ -11,6 +11,11 @@ import datetime
 import shutil
 import errno
 
+# Find the repo directory and the default param files
+DIRECTORY = os.path.split(__file__)[0]
+PARAMETERS_FILE = os.path.join(DIRECTORY, 'default.parameters')
+HALFSPACE_DB_FILE = os.path.join(DIRECTORY, 'halfspace.detectorbank')
+LINE_DB_FILE = os.path.join(DIRECTORY, 'line.detectorbank')
 
 class FileNamer(object):
     """Defines the naming convention for whiski-related files.
@@ -660,7 +665,8 @@ def setup_session_directory(directory, input_video, force=False):
     shutil.copyfile(input_video, new_video_filename)
     
     # Copy the parameter files in
-    for filename in ['default.parameters', 'halfspace.detectorbank', 'line.detectorbank']:
-        shutil.copyfile(filename, os.path.join(directory, filename))
+    for filename in [PARAMETERS_FILE, HALFSPACE_DB_FILE, LINE_DB_FILE]:
+        raw_filename = os.path.split(filename)[1]
+        shutil.copyfile(filename, os.path.join(directory, raw_filename))
     
     return FileNamer.from_video(new_video_filename)

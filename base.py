@@ -8,6 +8,7 @@ import tables
 from whisk.python import trace
 import re
 import datetime 
+import shutil
 import errno
 
 
@@ -618,3 +619,41 @@ def pipeline_trace(input_vfile, h5_filename,
             #~ if proc.exitcode != 0:
                 #~ raise RuntimeError("some issue with stitching")
 
+
+def setup_session_directory(directory, input_video, force=False):
+    """Create (or overwrite) directory for whisker tracking"""
+    # Parse the input video filename
+    input_video = os.path.abspath(os.path.expanduser(input_video))
+    if not os.path.exists(input_video):
+        raise ValueError("%s does not exist" % input_video)
+    input_video_directory, input_video_filename = os.path.split(input_video)
+    
+    # Erase existing directory and create anew
+    whiski_files = ['.mp4', '.avi', '.whiskers', '.tif', '.measurements',
+        '.detectorbank', '.parameters', '.hdf5']
+    if os.path.exists(directory):
+        # Check that it looks like a whiskers directory
+        file_list = os.listdir(directory)
+        for filename in file_list:
+            if (os.path.splitext(filename)[1]) not in whiski_files:
+                raise ValueError(directory + 
+                    " does not look safe to overwrite, aborting")
+        
+        # Get user confirmation
+        if not force:
+            confirm = raw_input('Ok to erase %s? [y/N]: ' % directory)
+            if confirm.upper() != 'Y':
+                print "aborting"
+                return
+        
+        # Erase
+        os.system('rm -rf %s' % directory)
+    os.mkdir(directory)
+    
+    # Copy the input video into the session directory
+    new_video_filename = os.path.join(directory, input_video_filename)
+    shutil.copyfile(input_video, new_video_filename)
+    
+    # Copy the parameter files in
+    for filename in ['default.parameters', 'halfspace.detectorbank', 'line.detectorbank']:
+        shutil.copyfile(filename, os.path.join(directory, filename))

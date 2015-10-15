@@ -78,7 +78,7 @@ class FileNamer(object):
             print "warning: nonexistent tiff stack %s" % tiff_stack_filename        
         basename, ext = os.path.splitext(tiff_stack_filename)
         if ext != '.tif':
-            raise ValueError("%s is not a *.tif stack" % whiskers_file_name)
+            raise ValueError("%s is not a *.tif stack" % tiff_stack_filename)
         return FileNamer(basename)       
 
     @property
@@ -156,13 +156,24 @@ class WhiskerSeg(tables.IsDescription):
 def write_chunk(chunk, chunkname, directory='.'):
     tifffile.imsave(os.path.join(directory, chunkname), chunk, compress=0)
 
-def trace_chunk(chunk_name):
-    print "Starting", chunk_name
+def trace_chunk(video_filename):
+    """Run trace on an input file
+    
+    First we create a whiskers filename from `video_filename`, which is
+    the same file with '.whiskers' replacing the extension. Then we run
+    trace using subprocess.
+    
+    Care is taken to move into the working directory during trace, and then
+    back to the original directory.
+    
+    Returns:
+        stdout, stderr
+    """
+    print "Starting", video_filename
     orig_dir = os.getcwd()
-    fn = FileNamer.from_tiff_stack(chunk_name)
-    run_dir, raw_tiff_stack = os.path.split(fn.tiff_stack)
-    whiskers_file = fn.whiskers
-    command = ['trace', raw_tiff_stack, whiskers_file]
+    run_dir, raw_video_filename = os.path.split(os.path.abspath(video_filename))
+    whiskers_file = FileNamer.from_video(video_filename).whiskers
+    command = ['trace', raw_video_filename, whiskers_file]
 
     os.chdir(run_dir)
     try:
@@ -175,7 +186,7 @@ def trace_chunk(chunk_name):
         raise
     finally:
         os.chdir(orig_dir)
-    print "Done", chunk_name
+    print "Done", video_filename
     
     if not os.path.exists(whiskers_file):
         print raw_filename
@@ -790,3 +801,38 @@ def normalize_path_and_optionally_get_permission(test_root, force=False):
         get_permission_for_test_root(test_root)    
     
     return test_root
+
+def run_standard(test_root='~/whiski_wrap_test', force=False):
+    """Run a standard trace on a test file to get baseline time"""
+    # Check we have commands we need
+    probe_needed_commands()
+    
+    # Set up test root
+    test_root = normalize_path_and_optionally_get_permission(test_root,
+        force=force)
+    
+    # Find the video to use
+    vfile1 = os.path.join(DIRECTORY, 'test_video2.mp4')    
+
+    # Set up the test directory
+    fn = setup_session_directory(os.path.join(test_root, 'standard'), vfile1)
+
+    # Run the test
+    start_time = time.time()
+    trace_chunk(fn.video('mp4'))
+    stop_time = time.time()
+    standard_duration = stop_time - start_time
+    
+    # Stitch
+    setup_hdf5(fn.hdf5, expectedrows=100000)
+    append_whiskers_to_hdf5(
+        whisk_filename=fn.whiskers,
+        h5_filename=fn.hdf5, 
+        chunk_start=0)    
+    
+    # Get the result
+    with tables.open_file(fn.hdf5) as fi:
+        test_result = pandas.DataFrame.from_records(
+            fi.root.summary.read())     
+
+    return test_result, standard_duration

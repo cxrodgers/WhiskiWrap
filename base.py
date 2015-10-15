@@ -723,16 +723,12 @@ def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False):
     Gets files from repo. Sets standard params.
     Calls run_benchmarks on the results
     """
+    # Check we have commands we need
     probe_needed_commands()
     
-    # Form test root
-    test_root = os.path.abspath(os.path.expanduser(test_root))
-    
-    # Get permission to use it
-    if not force:
-        response = raw_input('Run tests in %s? [y/N]: ' % test_root)
-        if response.upper() != 'Y':
-            raise ValueError("did not receive permission to run test")
+    # Set up test root
+    test_root = normalize_path_and_optionally_get_permission(test_root,
+        force=force)
     
     # Find the video to use
     vfile1 = os.path.join(DIRECTORY, 'test_video_50s.mp4')
@@ -753,16 +749,13 @@ def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False):
 
 def run_offset_test(test_root='~/whiski_wrap_test', start=1525, offset=5,
     n_frames=30, force=False):
+    """Run a test where we offset the frame start"""
+    # Check we have commands we need
     probe_needed_commands()
     
-    # Form test root
-    test_root = os.path.abspath(os.path.expanduser(test_root))
-    
-    # Get permission to use it
-    if not force:
-        response = raw_input('Run tests in %s? [y/N]: ' % test_root)
-        if response.upper() != 'Y':
-            raise ValueError("did not receive permission to run test")
+    # Set up test root
+    test_root = normalize_path_and_optionally_get_permission(test_root,
+        force=force)
     
     # Find the video to use
     vfile1 = os.path.join(DIRECTORY, 'test_video2.mp4')
@@ -781,3 +774,19 @@ def run_offset_test(test_root='~/whiski_wrap_test', start=1525, offset=5,
     test_results, durations = run_benchmarks(tests, test_root)
 
     return test_results, durations
+
+def get_permission_for_test_root(test_root):
+    """Ask for permission to run in test_root"""
+    response = raw_input('Run tests in %s? [y/N]: ' % test_root)
+    if response.upper() != 'Y':
+        raise ValueError("did not receive permission to run test")   
+
+def normalize_path_and_optionally_get_permission(test_root, force=False):
+    # Form test root
+    test_root = os.path.abspath(os.path.expanduser(test_root))
+    
+    # Get permission to use it
+    if not force:
+        get_permission_for_test_root(test_root)    
+    
+    return test_root

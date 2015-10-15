@@ -1,17 +1,14 @@
+"""Main components of each stage of processing"""
+
 import tifffile
 import os
-#~ import my
 import numpy as np
 import subprocess
 import multiprocessing
 import tables
 from whisk.python import trace
-import re
-import datetime 
-import shutil
-import errno
-import time
 import pandas
+import WhiskiWrap
 
 # Find the repo directory and the default param files
 DIRECTORY = os.path.split(__file__)[0]
@@ -19,129 +16,6 @@ PARAMETERS_FILE = os.path.join(DIRECTORY, 'default.parameters')
 HALFSPACE_DB_FILE = os.path.join(DIRECTORY, 'halfspace.detectorbank')
 LINE_DB_FILE = os.path.join(DIRECTORY, 'line.detectorbank')
 
-class FileNamer(object):
-    """Defines the naming convention for whiski-related files.
-    
-    This can be initialized from a basename, such as:
-        fn = FileNamer('~/my_directory/session_name')
-    or from an existing video file or whiskers file, such as:
-        fn = FileNamer.from_whiskers('~/my_directory/session_name.whiskers')
-    In the latter case a warning is issued if no such file exists, or if it
-    does not follow the typical naming convention.
-    
-    Once initialized, this object generates names:
-        fn.whiskers
-        fn.tiff_stack
-        fn.video(type='mp4')
-    """
-    def __init__(self, basename):
-        """Initialize based on full path and filename (without extension)."""
-        self.basename = os.path.abspath(os.path.expanduser(basename))
-    
-    def video(self, typ='tif'):
-        return self.basename + '.' + typ
-    
-    @property
-    def tiff_stack(self):
-        """Returns the name for the tiff stack"""
-        return self.video('tif')
-    
-    @property
-    def whiskers(self):
-        """Return the name for the whiskers file"""
-        return self.basename + '.whiskers'
-    
-    @classmethod
-    def from_video(self, video_name):
-        """Generates FileNamer based on an existing video name"""
-        if not os.path.exists(video_name):
-            print "warning: nonexistent video %s" % video_name
-        basename, ext = os.path.splitext(video_name)
-        if ext not in ['.mp4', '.avi', '.mkv', '.tif']:
-            print "warning: %s does not appear to be a video file" % video_name
-        return FileNamer(basename)
-
-    @classmethod
-    def from_whiskers(self, whiskers_file_name):
-        """Generates FileNamer based on an existing whiskers file"""
-        if not os.path.exists(whiskers_file_name):
-            print "warning: nonexistent whiskers file %s" % whiskers_file_name        
-        basename, ext = os.path.splitext(whiskers_file_name)
-        if ext != '.whiskers':
-            raise ValueError("%s is not a whiskers file" % whiskers_file_name)
-        return FileNamer(basename)       
-
-    @classmethod
-    def from_tiff_stack(self, tiff_stack_filename):
-        """Generates FileNamer based on an existing tiff stack"""
-        if not os.path.exists(tiff_stack_filename):
-            print "warning: nonexistent tiff stack %s" % tiff_stack_filename        
-        basename, ext = os.path.splitext(tiff_stack_filename)
-        if ext != '.tif':
-            raise ValueError("%s is not a *.tif stack" % tiff_stack_filename)
-        return FileNamer(basename)       
-
-    @property
-    def hdf5(self):
-        """Return the name for the hdf5 file"""
-        return self.basename + '.hdf5'
-
-
-def probe_command_availability(cmd):
-    """Try to run 'cmd' in a subprocess and return availability.
-    
-    'cmd' should be provided in the format expected by subprocess: a string,
-    or a list of strings if multiple arguments.
-    
-    Raises RuntimeError if the called process crashes (eg, via Ctrl+C)
-    
-    Returns:
-        command_available, stdout, stderr
-    
-    stdout and stderr will be '' if command was not available.
-    """
-    # Try to initialize a pipe which will only work if it is available
-    command_available = True
-    try:
-        # If it fails here due to nonexistence of command, pipe is
-        # never initialized
-        pipe = subprocess.Popen(cmd, 
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except OSError:
-        return False, '', ''
-    
-    # This extract data from the pipe
-    # I think this will always work?
-    try:
-        stdout, stderr = pipe.communicate()
-    except:
-        raise RuntimeError("process crashed")
-    
-    # Try to terminate it if it didn't already happen
-    # Add some point it seemed this was necessary to restored stdout
-    # but this no longer seems to be the case
-    try:
-        pipe.terminate()
-    except OSError:
-        pass
-    
-    return command_available, stdout, stderr
-
-def probe_needed_commands():
-    """Test whether we have the commands we need.
-    
-    ffmpeg
-    trace
-    """
-    ffmpeg_av = probe_command_availability('ffmpeg')
-    if not ffmpeg_av[0]:
-        raise OSError("'ffmpeg' is not available on the system path")    
-    if 'the FFmpeg developers' not in ffmpeg_av[2].split('\n')[0]:
-        print "warning: libav ffmpeg appears to be installed"
-    
-    trace_av = probe_command_availability('trace')
-    if not trace_av[0]:
-        raise OSError("'trace' is not available on the system path")
 
 class WhiskerSeg(tables.IsDescription):
     time = tables.UInt32Col()
@@ -271,277 +145,6 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
     table.flush()
     h5file.close()    
 
-def process_chunks_of_video(filename, 
-    frame_start=None, frame_stop=None, n_frames=None, frame_rate=None,
-    frame_func=None, chunk_func=None, 
-    image_w=None, image_h=None,
-    verbose=False,
-    frames_per_chunk=1000, bufsize=10**9,
-    pix_fmt='gray', finalize='list'):
-    """Read frames from video, apply function, return result
-    
-    The dataflow is:
-    1) Use a pipe to ffmpeg to load chunks of frames_per_chunk frames
-    2) Apply frame_func to each frame
-    3) Apply chunk_func to the chunk
-    4) Append the result of chunk_func to a list
-    5) "Finalize" that list and return
-    
-    If n_frames > # available, returns just the available frames with a
-    warning.
-    
-    filename : file to read
-    frame_start, frame_stop, n_frames : frame range to process
-        If frame_start is None: defaults to zero
-        If frame_stop is None: defaults to frame_start + n_frames
-        If frame_stop and n_frames are both None: processes the entire video
-    frame_rate : used to convert frame_start etc. to times, as required by
-        ffmpeg. If None, it will be inferred from ffprobe
-    frame_func : function to apply to each frame
-        If None, nothing is applied. This obviously requires a lot of memory.
-    chunk_func : function to apply to each chunk
-        If None, nothing is applied
-    image_w, image_h : width and height of video in pixels
-        If None, these are inferred using ffprobe
-    verbose : If True, prints out frame number for every chunk
-    frames_per_chunk : number of frames to load at once from ffmpeg
-    bufsize : sent to subprocess.Popen
-    pix_fmt : Sent to ffmpeg.
-    finalize : Function applied to final result.
-        'concatenate' : apply np.concatenate
-        'list' : do nothing. In this case the result will be a list of
-            length n_chunks, each element of which is an array of length
-            frames_per_chunk
-        'listcomp' : uses a list comprehension to collapse over the chunks,
-            so the result is a list of length equal to the total number of
-            frames processed
-    
-    This function has been modified from my.video to be optimized for
-    processing chunks rather than entire videos.
-    
-    Returns: result, as described above
-    """
-    # Get aspect
-    if image_w is None or image_h is None:
-        image_w, image_h, junk = get_video_params(filename)
-    if frame_rate is None:
-        frame_rate = get_video_params(filename)[2]
-    
-    # Frame range defaults
-    if frame_start is None:
-        frame_start = 0
-    if frame_stop is None:
-        if n_frames is None:
-            frame_stop = np.inf
-            n_frames = np.inf
-        else:
-            frame_stop = n_frames - frame_start
-    if n_frames is None:
-        n_frames = frame_stop - frame_start
-    assert n_frames == frame_stop - frame_start
-    if frame_stop < frame_start:
-        raise ValueError("frame start cannot be greater than frame stop")
-    
-    # Set up pix_fmt
-    if pix_fmt == 'gray':
-        bytes_per_pixel = 1
-        reshape_size = (image_h, image_w)
-    elif pix_fmt == 'rgb24':
-        bytes_per_pixel = 3
-        reshape_size = (image_h, image_w, 3)
-    else:
-        raise ValueError("can't handle pix_fmt:", pix_fmt)
-    read_size_per_frame = bytes_per_pixel * image_w * image_h
-    
-    # ffmpeg requires start time and total time to be in seconds, not frames
-    # Add 10% of a frame so that it will round down to the correct frame
-    start_frame_time = (frame_start + 0.1) / float(frame_rate)
-    total_time = (n_frames + 0.1) / float(frame_rate)
-    
-    # Create the command
-    command = ['ffmpeg', 
-        '-ss', '%0.4f' % start_frame_time,
-        '-i', filename,
-        '-t', '%0.4f' % total_time,
-        '-f', 'image2pipe',
-        '-pix_fmt', pix_fmt,
-        '-vcodec', 'rawvideo', '-']
-    
-    # To store result
-    res_l = []
-    frames_read = 0
-
-    # Init the pipe
-    # We set stderr to PIPE to keep it from writing to screen
-    # Do this outside the try, because errors here won't init the pipe anyway
-    pipe = subprocess.Popen(command, 
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
-        bufsize=bufsize)
-
-    # Catch any IO errors and restore stdout
-    try:
-        # Read in chunks
-        out_of_frames = False
-        while frames_read < n_frames and not out_of_frames:
-            if verbose:
-                print frames_read
-            # Figure out how much to acquire
-            if frames_read + frames_per_chunk > n_frames:
-                this_chunk = n_frames - frames_read
-            else:
-                this_chunk = frames_per_chunk
-            
-            # Read this_chunk, or as much as we can
-            raw_image = pipe.stdout.read(read_size_per_frame * this_chunk)
-            
-            # check if we ran out of frames
-            if len(raw_image) < read_size_per_frame * this_chunk:
-                print "warning: ran out of frames"
-                out_of_frames = True
-                this_chunk = len(raw_image) / read_size_per_frame
-                assert this_chunk * read_size_per_frame == len(raw_image)
-            
-            # Process
-            flattened_im = np.fromstring(raw_image, dtype='uint8')
-            if bytes_per_pixel == 1:
-                video = flattened_im.reshape(
-                    (this_chunk, image_h, image_w))
-            else:
-                video = flattened_im.reshape(
-                    (this_chunk, image_h, image_w, bytes_per_pixel))
-            
-            # Apply the frame_func to each frame
-            # We make it an array again, but note this can lead to 
-            # dtype and shape problems later for some frame_func
-            if frame_func is not None:
-                chunk_res = np.asarray(map(frame_func, video))
-            else:
-                chunk_res = video
-            
-            # Apply chunk_func to each chunk
-            if chunk_func is not None:
-                chunk_res2 = chunk_func(chunk_res)
-            else:
-                chunk_res2 = chunk_res
-            
-            # Store the result
-            res_l.append(chunk_res2)
-            
-            # Update
-            frames_read += this_chunk
-
-    except:
-        raise
-
-    finally:
-        # Restore stdout
-        pipe.terminate()
-
-        # Keep the leftover data and the error signal (ffmpeg output)
-        stdout, stderr = pipe.communicate()
-
-    if frames_read != n_frames:
-        # This usually happens when there's some rounding error in the frame
-        # times
-        raise ValueError("did not read the correct number of frames")
-
-    # Stick chunks together
-    if len(res_l) == 0:
-        print "warning: no data found"
-        res = np.array([])
-    elif finalize == 'concatenate':
-        res = np.concatenate(res_l)
-    elif finalize == 'listcomp':
-        res = np.array([item for sublist in res_l for item in sublist])
-    elif finalize == 'list':
-        res = res_l
-    else:
-        print "warning: unknown finalize %r" % finalize
-        res = res_l
-        
-    return res
-
-def get_video_params(video_filename):
-    """Returns width, height, frame_rate of video using ffprobe"""
-    # Video duration and hence start time
-    proc = subprocess.Popen(['ffprobe', video_filename],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    res = proc.communicate()[0]
-
-    # Check if ffprobe failed, probably on a bad file
-    if 'Invalid data found when processing input' in res:
-        raise ValueError("Invalid data found by ffprobe in %s" % video_filename)
-    
-    # Find the video stream
-    width_height_l = []
-    frame_rate_l = []
-    for line in res.split("\n"):
-        # Skip lines that aren't stream info
-        if not line.strip().startswith("Stream #"):
-            continue
-        
-        # Check that this is a video stream
-        comma_split = line.split(',')
-        if " Video: " not in comma_split[0]:
-            continue
-        
-        # The third group should contain the size and aspect ratio
-        if len(comma_split) < 3:
-            raise ValueError("malform video stream string:", line)
-        
-        # The third group should contain the size and aspect, separated
-        # by spaces
-        size_and_aspect = comma_split[2].split()        
-        if len(size_and_aspect) == 0:
-            raise ValueError("malformed size/aspect:", comma_split[2])
-        size_string = size_and_aspect[0]
-        
-        # The size should be two numbers separated by x
-        width_height = size_string.split('x')
-        if len(width_height) != 2:
-            raise ValueError("malformed size string:", size_string)
-        
-        # Cast to int
-        width_height_l.append(map(int, width_height))
-    
-        # The fourth group in comma_split should be %f fps
-        frame_rate_fps = comma_split[4].split()
-        if frame_rate_fps[1] != 'fps':
-            raise ValueError("malformed frame rate:", frame_rate_fps)
-        frame_rate_l.append(float(frame_rate_fps[0]))
-    
-    if len(width_height_l) > 1:
-        print "warning: multiple video streams found, returning first"
-    return width_height_l[0][0], width_height_l[0][1], frame_rate_l[0]
-
-def get_video_duration(video_filename, return_as_timedelta=False):
-    """Return duration of video using ffprobe"""
-    # Video duration and hence start time
-    proc = subprocess.Popen(['ffprobe', video_filename],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    res = proc.communicate()[0]
-
-    # Check if ffprobe failed, probably on a bad file
-    if 'Invalid data found when processing input' in res:
-        raise ValueError(
-            "Invalid data found by ffprobe in %s" % video_filename)
-
-    # Parse out start time
-    duration_match = re.search("Duration: (\S+),", res)
-    assert duration_match is not None and len(duration_match.groups()) == 1
-    video_duration_temp = datetime.datetime.strptime(
-        duration_match.groups()[0], '%H:%M:%S.%f')
-    video_duration = datetime.timedelta(
-        hours=video_duration_temp.hour, 
-        minutes=video_duration_temp.minute, 
-        seconds=video_duration_temp.second,
-        microseconds=video_duration_temp.microsecond)    
-    
-    if return_as_timedelta:
-        return video_duration
-    else:
-        return video_duration.total_seconds()
-
 def pipeline_trace(input_vfile, h5_filename,
     epoch_sz_frames=100000, chunk_sz_frames=1000, 
     frame_start=0, frame_stop=None,
@@ -557,7 +160,7 @@ def pipeline_trace(input_vfile, h5_filename,
     n_trace_processes : how many simultaneous processes to use for tracing
     expectedrows, flush_interval : used to set up hdf5 file
     """
-    probe_needed_commands()
+    WhiskiWrap.utils.probe_needed_commands()
     
     # Figure out where to store temporary data
     input_vfile = os.path.abspath(input_vfile)
@@ -567,8 +170,8 @@ def pipeline_trace(input_vfile, h5_filename,
     setup_hdf5(h5_filename, expectedrows)
 
     # Figure out how many frames and epochs
-    duration = get_video_duration(input_vfile)
-    frame_rate = get_video_params(input_vfile)[2]
+    duration = WhiskiWrap.video_utils.get_video_duration(input_vfile)
+    frame_rate = WhiskiWrap.video_utils.get_video_params(input_vfile)[2]
     total_frames = int(np.rint(duration * frame_rate))
     if frame_stop is None:
         frame_stop = total_frames
@@ -589,7 +192,7 @@ def pipeline_trace(input_vfile, h5_filename,
         # read everything
         # need to be able to crop here
         print "Reading"
-        frames = process_chunks_of_video(input_vfile, 
+        frames = WhiskiWrap.video_utils.process_chunks_of_video(input_vfile, 
             frame_start=start_epoch, frame_stop=stop_epoch,
             frames_per_chunk=chunk_sz_frames, # only necessary for chunk_func
             frame_func=None, chunk_func=None,
@@ -621,7 +224,8 @@ def pipeline_trace(input_vfile, h5_filename,
         print "Stitching"
         for chunk_start, chunk_name in zip(chunk_starts, chunk_names):
             # Append each chunk to the hdf5 file
-            fn = FileNamer.from_tiff_stack(os.path.join(input_dir, chunk_name))
+            fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(
+                os.path.join(input_dir, chunk_name))
             append_whiskers_to_hdf5(
                 whisk_filename=fn.whiskers,
                 h5_filename=h5_filename, 
@@ -643,196 +247,4 @@ def pipeline_trace(input_vfile, h5_filename,
                 #~ raise RuntimeError("some issue with stitching")
 
 
-def setup_session_directory(directory, input_video, force=False):
-    """Create (or overwrite) directory for whisker tracking"""
-    # Parse the input video filename
-    input_video = os.path.abspath(os.path.expanduser(input_video))
-    if not os.path.exists(input_video):
-        raise ValueError("%s does not exist" % input_video)
-    input_video_directory, input_video_filename = os.path.split(input_video)
-    
-    # Erase existing directory and create anew
-    whiski_files = ['.mp4', '.avi', '.whiskers', '.tif', '.measurements',
-        '.detectorbank', '.parameters', '.hdf5']
-    if os.path.exists(directory):
-        # Check that it looks like a whiskers directory
-        file_list = os.listdir(directory)
-        for filename in file_list:
-            if (os.path.splitext(filename)[1]) not in whiski_files:
-                raise ValueError(directory + 
-                    " does not look safe to overwrite, aborting")
-        
-        # Get user confirmation
-        if not force:
-            confirm = raw_input('Ok to erase %s? [y/N]: ' % directory)
-            if confirm.upper() != 'Y':
-                raise ValueError("did not receive permission to setup test")
-        
-        # Erase
-        os.system('rm -rf %s' % directory)
-    os.mkdir(directory)
-    
-    # Copy the input video into the session directory
-    new_video_filename = os.path.join(directory, input_video_filename)
-    shutil.copyfile(input_video, new_video_filename)
-    
-    # Copy the parameter files in
-    for filename in [PARAMETERS_FILE, HALFSPACE_DB_FILE, LINE_DB_FILE]:
-        raw_filename = os.path.split(filename)[1]
-        shutil.copyfile(filename, os.path.join(directory, raw_filename))
-    
-    return FileNamer.from_video(new_video_filename)
 
-def run_benchmarks(benchmark_params, test_root):
-    """Run the benchmarks
-    
-    For every row in benchmark params, run a trace on the input video
-    using the params specified.
-    
-    benchmark_params: DataFrame with columns corresponding to keywords
-        to pass to pipeline_trace. Should have columns 'name',
-        'input_video', 'chunk_sz_frames', 'epoch_sz_frames',
-        'frame_start', 'frame_stop', 'n_trace_processes', etc
-    
-    Returns:
-        test_results, durations
-        test_results : Dict from test['name'] to results read from hdf5 file
-        durations : list of durations taken
-    """
-    probe_needed_commands()
-    
-    test_results = {}
-    durations = []    
-    for idx, test in benchmark_params.iterrows():
-        print test['name']
-        test_dir = os.path.expanduser(os.path.join(test_root, test['name']))
-        fn = setup_session_directory(test_dir, test['input_video'])
-
-        # Run
-        start_time = time.time()
-        pipeline_trace(
-            fn.video('mp4'),
-            fn.hdf5,
-            chunk_sz_frames=test['chunk_sz_frames'],
-            epoch_sz_frames=test['epoch_sz_frames'],
-            frame_start=test['frame_start'],
-            frame_stop=test['frame_stop'],
-            n_trace_processes=test['n_trace_processes'])
-        stop_time = time.time()
-        durations.append(stop_time - start_time)
-
-        # Get the summary
-        with tables.open_file(fn.hdf5) as fi:
-            test_results[test['name']] = pandas.DataFrame.from_records(
-                fi.root.summary.read()) 
-    
-    return test_results, durations
-
-def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False):
-    """Run a suite of standard benchmarks.
-    
-    Gets files from repo. Sets standard params.
-    Calls run_benchmarks on the results
-    """
-    # Check we have commands we need
-    probe_needed_commands()
-    
-    # Set up test root
-    test_root = normalize_path_and_optionally_get_permission(test_root,
-        force=force)
-    
-    # Find the video to use
-    vfile1 = os.path.join(DIRECTORY, 'test_video_50s.mp4')
-    
-    # Construct the tests
-    tests = pandas.DataFrame([
-        ['one_chunk', vfile1, 0, 10, 100, 100, 1],
-        ['one_chunk_offset', vfile1, 2, 10, 100, 100, 1],
-        ],
-        columns=(
-            'name', 'input_video', 'frame_start', 'frame_stop', 
-            'epoch_sz_frames', 'chunk_sz_frames', 'n_trace_processes'))
-
-    # Run the tests
-    test_results, durations = run_benchmarks(tests, test_root)
-
-    return test_results, durations
-
-def run_offset_test(test_root='~/whiski_wrap_test', start=1525, offset=5,
-    n_frames=30, force=False):
-    """Run a test where we offset the frame start"""
-    # Check we have commands we need
-    probe_needed_commands()
-    
-    # Set up test root
-    test_root = normalize_path_and_optionally_get_permission(test_root,
-        force=force)
-    
-    # Find the video to use
-    vfile1 = os.path.join(DIRECTORY, 'test_video2.mp4')
-
-    # Construct the tests
-    stop = start + n_frames
-    tests = pandas.DataFrame([
-        ['one_chunk', vfile1, start, stop, 100, 100, 1],
-        ['one_chunk_offset', vfile1, start + offset, stop, 100, 100, 1],
-        ],
-        columns=(
-            'name', 'input_video', 'frame_start', 'frame_stop', 
-            'epoch_sz_frames', 'chunk_sz_frames', 'n_trace_processes'))
-    
-    # Run the tests
-    test_results, durations = run_benchmarks(tests, test_root)
-
-    return test_results, durations
-
-def get_permission_for_test_root(test_root):
-    """Ask for permission to run in test_root"""
-    response = raw_input('Run tests in %s? [y/N]: ' % test_root)
-    if response.upper() != 'Y':
-        raise ValueError("did not receive permission to run test")   
-
-def normalize_path_and_optionally_get_permission(test_root, force=False):
-    # Form test root
-    test_root = os.path.abspath(os.path.expanduser(test_root))
-    
-    # Get permission to use it
-    if not force:
-        get_permission_for_test_root(test_root)    
-    
-    return test_root
-
-def run_standard(test_root='~/whiski_wrap_test', force=False):
-    """Run a standard trace on a test file to get baseline time"""
-    # Check we have commands we need
-    probe_needed_commands()
-    
-    # Set up test root
-    test_root = normalize_path_and_optionally_get_permission(test_root,
-        force=force)
-    
-    # Find the video to use
-    vfile1 = os.path.join(DIRECTORY, 'test_video2.mp4')    
-
-    # Set up the test directory
-    fn = setup_session_directory(os.path.join(test_root, 'standard'), vfile1)
-
-    # Run the test
-    start_time = time.time()
-    trace_chunk(fn.video('mp4'))
-    stop_time = time.time()
-    standard_duration = stop_time - start_time
-    
-    # Stitch
-    setup_hdf5(fn.hdf5, expectedrows=100000)
-    append_whiskers_to_hdf5(
-        whisk_filename=fn.whiskers,
-        h5_filename=fn.hdf5, 
-        chunk_start=0)    
-    
-    # Get the result
-    with tables.open_file(fn.hdf5) as fi:
-        test_result = pandas.DataFrame.from_records(
-            fi.root.summary.read())     
-
-    return test_result, standard_duration

@@ -110,12 +110,34 @@ def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False):
         force=force)
     
     # Find the video to use
-    vfile1 = os.path.join(WhiskiWrap.DIRECTORY, 'test_video_50s.mp4')
+    vfile1 = os.path.join(WhiskiWrap.DIRECTORY, 'test_video_165s.mp4')
+    vfile2 = '/mnt/nas2/homes/chris/test_video_165s.mp4'
     
     # Construct the tests
+    # NFRAMES must be at least NPROCS * CHUNKSZ or not all procs will be used
+    # NFRAMES should be an even multiple of NPROCS * CHUNKSZ or some procs
+    # will be left without work at the end.
     tests = pandas.DataFrame([
         ['one_chunk', vfile1, 0, 10, 100, 100, 1],
         ['one_chunk_offset', vfile1, 2, 10, 100, 100, 1],
+        ['4800_frames_030_chunksz_04_procs_loc', vfile1, 0, 4800, 4800, 30, 4],
+        ['4800_frames_030_chunksz_08_procs_loc', vfile1, 0, 4800, 4800, 30, 8],
+        ['4800_frames_030_chunksz_16_procs_loc', vfile1, 0, 4800, 4800, 30, 16],
+        ['4800_frames_100_chunksz_04_procs_loc', vfile1, 0, 4800, 4800, 100, 4],
+        ['4800_frames_100_chunksz_08_procs_loc', vfile1, 0, 4800, 4800, 100, 8],
+        ['4800_frames_100_chunksz_16_procs_loc', vfile1, 0, 4800, 4800, 100, 16],
+        ['4800_frames_300_chunksz_04_procs_loc', vfile1, 0, 4800, 4800, 300, 4],
+        ['4800_frames_300_chunksz_08_procs_loc', vfile1, 0, 4800, 4800, 300, 8],
+        ['4800_frames_300_chunksz_16_procs_loc', vfile1, 0, 4800, 4800, 300, 16],
+        ['4800_frames_030_chunksz_04_procs_nas', vfile2, 0, 4800, 4800, 30, 4],
+        ['4800_frames_030_chunksz_08_procs_nas', vfile2, 0, 4800, 4800, 30, 8],
+        ['4800_frames_030_chunksz_16_procs_nas', vfile2, 0, 4800, 4800, 30, 16],
+        ['4800_frames_100_chunksz_04_procs_nas', vfile2, 0, 4800, 4800, 100, 4],
+        ['4800_frames_100_chunksz_08_procs_nas', vfile2, 0, 4800, 4800, 100, 8],
+        ['4800_frames_100_chunksz_16_procs_nas', vfile2, 0, 4800, 4800, 100, 16],
+        ['4800_frames_300_chunksz_04_procs_nas', vfile2, 0, 4800, 4800, 300, 4],
+        ['4800_frames_300_chunksz_08_procs_nas', vfile2, 0, 4800, 4800, 300, 8],
+        ['4800_frames_300_chunksz_16_procs_nas', vfile2, 0, 4800, 4800, 300, 16],        
         ],
         columns=(
             'name', 'input_video', 'frame_start', 'frame_stop', 

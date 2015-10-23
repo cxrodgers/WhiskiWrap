@@ -46,7 +46,7 @@ def trace_chunk(video_filename):
     print "Starting", video_filename
     orig_dir = os.getcwd()
     run_dir, raw_video_filename = os.path.split(os.path.abspath(video_filename))
-    whiskers_file = FileNamer.from_video(video_filename).whiskers
+    whiskers_file = WhiskiWrap.utils.FileNamer.from_video(video_filename).whiskers
     command = ['trace', raw_video_filename, whiskers_file]
 
     os.chdir(run_dir)

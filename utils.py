@@ -1,3 +1,12 @@
+"""Utility functions for WhiskiWrap
+
+FileNamer defines the naming convention for whiski-related files. This is
+not really mandatory but is used by the pipeline_trace function in base.
+
+The other utility functions are for probing the availability of needed
+system commands: ffmpeg, trace.
+"""
+
 import os
 import subprocess
 

@@ -1,4 +1,13 @@
-"""Main components of each stage of processing"""
+"""Main functions for running input videos through trace.
+
+The overall algorithm is contained in 'pipeline_trace'. Briefly, the input
+video is first broken into large epochs, each of which should be small enough
+to fit in available memory. Each epoch is then broken into many non-overlapping
+chunks. Each chunk is written to disk as a tiff stack, and parallel
+instances of 'trace' are called on each chunk. Finally, the results from
+each chunk are loaded and combined into a single large HDF5 file for the
+entire video.
+"""
 
 import tifffile
 import os

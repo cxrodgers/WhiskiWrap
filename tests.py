@@ -1,4 +1,12 @@
-"""Tests of functionality in WhiskiWrap"""
+"""Functions for running tests and/or benchmarks with WhiskiWrap.
+
+Each test is run in a session directory containing all the necessary
+files for that test.
+
+The function run_standard_benchmarks goes through a suite of tests. This
+tests that everything is working properly and also serves as an example
+of how to choose parameters and trace input videos.
+"""
 
 
 import os

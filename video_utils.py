@@ -1,4 +1,10 @@
-"""Utility functions for processing video"""
+"""Utility functions for processing video
+
+process_chunks_of_video : used in this module to load an input video with
+    ffmpeg and dump tiff stacks to disk of each chunk.
+get_video_params
+get_video_duration
+"""
 import os
 import numpy as np
 import subprocess

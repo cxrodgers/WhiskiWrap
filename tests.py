@@ -152,7 +152,7 @@ def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False,
     # Construct the tests
     tests = []
     for chunk_sz in chunk_size_l:
-        for n_process in n_process_l:
+        for n_process in n_processes_l:
             test_name = '%d_frames_%d_chunksz_%d_procs' % (
                 n_frames, chunk_sz, n_process)
             tests.append([test_name, input_video, 0, n_frames, epoch_sz,

@@ -155,7 +155,7 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
     h5file.close()    
 
 def pipeline_trace(input_vfile, h5_filename,
-    epoch_sz_frames=1600, chunk_sz_frames=200, 
+    epoch_sz_frames=3200, chunk_sz_frames=200, 
     frame_start=0, frame_stop=None,
     n_trace_processes=4, expectedrows=1000000, flush_interval=100000,
     ):

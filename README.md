@@ -43,8 +43,9 @@ To use the pre-built binary:
 4. `touch ~/whisk/share/whisk/__init__.py`
 5. `touch ~/whisk/share/whisk/python/__init__.py`
 6. Add these modules to your Python path.
-7. `echo "~/whisk/share" >> "~/.local/lib/python2.7/site-packages/whiski_wrap.pth`
-8. Test that everything worked by opening python or ipython and running `from whisk.python import traj, trace`
+7. `ln -s ~/dev/whisk/share/whisk/python ~/dev/whisk/python`
+8. or `echo "~/whisk/share" >> "~/.local/lib/python2.7/site-packages/whiski_wrap.pth`
+9. Test that everything worked by opening python or ipython and running `from whisk.python import traj, trace`
 
 To build from source:
 

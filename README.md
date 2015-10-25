@@ -7,6 +7,21 @@ My goal is to improve whiski in the following ways:
 2. Make it faster, by calling many instances of `trace` in parallel on non-overlapping chunks of the input video.
 3. Make it more cross-platform and memory-efficient, by converting whiski's output files into HDF5 files which can be read by multiple programs (Python, Matlab) on any operating system. Importantly, HDF5 files can also be read partially to avoid overflowing your system's memory.
 
+
+In brief, here is how WhiskiWrap works.
+1. Split the entire video into _epochs_ of about 100K frames (~100MB of data). The entire epoch will be read into memory, so the epoch size cannot be too big.
+2. For each epoch:
+  1. Split it into _chunks_ of about 1000 frames, each of which will be traced separately. The frames can optionally be cropped at this point.
+  2. Write each chunk to disk as a tiff stack (note: these files are quite large).
+  3. Trace each chunk with parallel instances of `trace`. A `whiskers` file is generated for each chunk.
+  4. Parse in order each chunk's `whiskers` file and append the results to an output HDF5 file.
+  5. (Optional) delete the intermediate chunk files here.
+
+The following parameters must be chosen:
+* `n_trace_processes` - the number of parallel instances of `trace` to run at the same time. The most efficient choice is the number of CPUs on your system.
+* `epoch_size` - the number of frames per epoch. It is most efficient to make this value as large as possible. However, it should not be so large that you run out of memory when reading in the entire epoch of video. 100000 is a reasonable choice.
+* `chunk_size` - the size of each chunk. Ideally, this should be `epoch_size` / `n_trace_processes`, so that all the processes complete at about the same time. It could also be `epoch_size` / (N * `n_trace_processes`) where N is an integer.
+
 # Installation
 WhiskiWrap is written in Python and relies on `ffmpeg` for reading input videos, `tifffile` for writing tiff stacks, `whiski` for tracing whiskers in the tiff stacks, and `pytables` for creating HDF5 files with all of the results.
 
@@ -64,18 +79,5 @@ git clone https://github.com/cxrodgers/WhiskiWrap.git
 
 `echo "~/dev" >> ~/.local/lib/python2.7/site-packages/whiski_wrap.pth`
 
-# Overall dataflow
 
-1. Split the entire video into epochs of about 100K frames (~100MB of data). We can load this much data without running out of memory or taking up too much space with temporary files. 
-2. For each epoch:
-  1. Split it into chunks of about 1000 frames, each of which will be traced separately.
-      
-    (Optional) Crop each frame here
-  2. Write each chunk to disk as a tiff stack (note: these files are quite large).
-  3. Trace each chunk with whiski. This step is done with ~4 parallel processes.
-
-     This generates a whiskers file for each chunk.
-  4. Combine the results of each chunk into an HDF5 file
-  5. (Optional) delete the intermediate chunk files here
-3. Finally we combine the results from each epoch.
 

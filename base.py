@@ -155,7 +155,7 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
     h5file.close()    
 
 def pipeline_trace(input_vfile, h5_filename,
-    epoch_sz_frames=100000, chunk_sz_frames=1000, 
+    epoch_sz_frames=1600, chunk_sz_frames=200, 
     frame_start=0, frame_stop=None,
     n_trace_processes=4, expectedrows=1000000, flush_interval=100000,
     ):
@@ -168,6 +168,10 @@ def pipeline_trace(input_vfile, h5_filename,
     frame_start, frame_stop : where to start and stop processing
     n_trace_processes : how many simultaneous processes to use for tracing
     expectedrows, flush_interval : used to set up hdf5 file
+    
+    TODO: combine the reading and writing stages using frame_func so that
+    we don't have to load the whole epoch in at once. In fact then we don't
+    even need epochs at all.
     """
     WhiskiWrap.utils.probe_needed_commands()
     
@@ -239,21 +243,6 @@ def pipeline_trace(input_vfile, h5_filename,
                 whisk_filename=fn.whiskers,
                 h5_filename=h5_filename, 
                 chunk_start=chunk_start)
-
-            #~ # Try to put this in its own process so that it releases
-            #~ # its memory leak upon completion
-            #~ proc = multiprocessing.Process(
-                #~ target=append_whiskers_to_hdf5,
-                #~ kwargs={
-                    #~ 'whisk_filename': os.path.join(
-                        #~ input_dir, chunk_name + '.whiskers'),
-                    #~ 'h5_filename': h5_filename,
-                    #~ 'chunk_start': chunk_start})
-            #~ proc.start()
-            #~ proc.join()
-            
-            #~ if proc.exitcode != 0:
-                #~ raise RuntimeError("some issue with stitching")
 
 
 

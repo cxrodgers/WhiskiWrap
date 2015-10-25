@@ -95,9 +95,10 @@ def process_chunks_of_video(filename,
     read_size_per_frame = bytes_per_pixel * image_w * image_h
     
     # ffmpeg requires start time and total time to be in seconds, not frames
-    # Add 10% of a frame so that it will round down to the correct frame
-    start_frame_time = (frame_start + 0.1) / float(frame_rate)
-    total_time = (n_frames + 0.1) / float(frame_rate)
+    # It seems to round up .. if I want start_time to be 0.0 and I set it to
+    # 0.003 (1/10th of a frame), then the first frame is skipped.
+    start_frame_time = (frame_start - 0.1) / float(frame_rate)
+    total_time = (n_frames + 0.2) / float(frame_rate)
     
     # Create the command
     command = ['ffmpeg', 

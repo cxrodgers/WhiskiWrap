@@ -228,13 +228,13 @@ def run_standard(test_root='~/whiski_wrap_test', force=False):
 
     # Run the test
     start_time = time.time()
-    trace_chunk(fn.video('mp4'))
+    WhiskiWrap.trace_chunk(fn.video('mp4'))
     stop_time = time.time()
     standard_duration = stop_time - start_time
     
     # Stitch
-    setup_hdf5(fn.hdf5, expectedrows=100000)
-    append_whiskers_to_hdf5(
+    WhiskiWrap.setup_hdf5(fn.hdf5, expectedrows=100000)
+    WhiskiWrap.append_whiskers_to_hdf5(
         whisk_filename=fn.whiskers,
         h5_filename=fn.hdf5, 
         chunk_start=0)    

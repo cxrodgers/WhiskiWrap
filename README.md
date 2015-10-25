@@ -9,6 +9,7 @@ My goal is to improve whiski in the following ways:
 
 
 In brief, here is how WhiskiWrap works.
+
 1. Split the entire video into _epochs_ of about 100K frames (~100MB of data). The entire epoch will be read into memory, so the epoch size cannot be too big.
 2. For each epoch:
   1. Split it into _chunks_ of about 1000 frames, each of which will be traced separately. The frames can optionally be cropped at this point.

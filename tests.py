@@ -221,7 +221,7 @@ def run_standard(test_root='~/whiski_wrap_test', force=False):
         force=force)
     
     # Find the video to use
-    vfile1 = os.path.join(WhiskiWrap.DIRECTORY, 'test_video2.mp4')    
+    vfile1 = os.path.join(WhiskiWrap.DIRECTORY, 'test_video_165s.mp4')    
 
     # Set up the test directory
     fn = setup_session_directory(os.path.join(test_root, 'standard'), vfile1)

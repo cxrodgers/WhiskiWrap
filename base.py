@@ -246,3 +246,200 @@ def pipeline_trace(input_vfile, h5_filename,
 
 
 
+class PFReader:
+    """Reads photonfocus modulated data stored in matlab files"""
+    def __init__(self, input_directory, n_threads=4):
+        """Initialize a new reader.
+        
+        input_directory : where the mat files are
+            They are assumed to have a format like img10.mat, etc.
+            They should contain variables called 'img' (a 4d array of
+            modulated frames) and 't' (timestamps of each frame).
+        n_threads : sent to pfDoubleRate_SetNrOfThreads
+        """
+        self.input_directory = input_directory
+
+        # Load the library
+        libboost_thread = ctypes.cdll.LoadLibrary(
+            '/usr/local/lib/libboost_thread.so')
+        self.pf_lib = ctypes.cdll.LoadLibrary(
+            '/home/chris/Downloads/PFInstaller_2_36_Linux64/'
+            'PFInstaller_2_36_Linux64/PFRemote/bin/libpfDoubleRate.so')
+        self.demod_func = self.pf_lib['pfDoubleRate_DeModulateImage']
+
+        # Set the number of threads
+        self.pf_lib['pfDoubleRate_SetNrOfThreads'](n_threads)
+        
+        # Find all the imgN.mat files in the input directory
+        self.matfile_number_strings = my.misc.apply_and_filter_by_regex(
+            '^img(\d+)\.mat$', os.listdir(self.input_directory), sort=False)
+        self.matfile_names = [
+            os.path.join(self.input_directory, 'img%s.mat' % fns)
+            for fns in self.matfile_number_strings]
+        self.matfile_numbers = map(int, self.matfile_number_strings)
+        self.matfile_ordering = np.argsort(self.matfile_numbers)
+
+        # Sort the names and numbers
+        self.sorted_matfile_names = np.array(self.matfile_names)[
+            self.matfile_ordering]
+        self.sorted_matfile_numbers = np.array(self.matfile_numbers)[
+            self.matfile_ordering]
+        
+        # Create variable to store timestamps
+        self.timestamps = []
+    
+    def iter_frames(self):
+        """Yields frames as they are read and demodulated.
+        
+        Iterates through the matfiles in order, demodulates each frame,
+        and yields them one at a time.
+        
+        The chunk of timestamps from each matfile is appended to the list
+        self.timestamps, so that self.timestamps is a list of arrays. There
+        will be more timestamps than read frames until the end of the chunk.
+        """
+        # Iterate through matfiles and load
+        for matfile_name in self.sorted_matfile_names:
+            # Load the raw data
+            # This is the slowest step
+            matfile_load = scipy.io.loadmat(matfile_name)
+            matfile_t = matfile_load['t'].flatten()
+            matfile_modulated_data = matfile_load['img'].squeeze()
+            assert matfile_modulated_data.ndim == 3 # height, width, time
+
+            # Append the timestamps
+            self.timestamps.append(matfile_t)
+
+            # Extract shape
+            n_frames = len(matfile_t)
+            assert matfile_modulated_data.shape[-1] == n_frames
+            modulated_frame_width = matfile_modulated_data.shape[1]
+            frame_height = matfile_modulated_data.shape[0]
+            
+            # Find the demodulated width
+            # This can be done by pfDoubleRate_GetDeModulatedWidth
+            # but I don't understand what it's doing.
+            if modulated_frame_width == 416:
+                demodulated_frame_width = 800
+            else:
+                raise ValueError("unknown modulated width: %d" %
+                    modulated_frame_width)
+            
+            # Create a buffer for the result of each frame
+            demodulated_frame_buffer = ctypes.create_string_buffer(
+                frame_height * demodulated_frame_width)
+            
+            # Iterate over frames
+            for n_frame in range(n_frames):
+                # Convert image to char array
+                # Ideally we would use a buffer here instead of a copy in order
+                # to save time. But Matlab data comes back in Fortran order 
+                # instead of C order, so this is not possible.
+                frame_charry = ctypes.c_char_p(
+                    matfile_modulated_data[:, :, n_frame].tobytes())
+                #~ frame_charry = ctypes.c_char_p(
+                    #~ bytes(matfile_modulated_data[:, :, n_frame].data))
+                
+                # Run
+                self.demod_func(demodulated_frame_buffer, frame_charry,
+                    demodulated_frame_width, frame_height, 
+                    modulated_frame_width)
+                
+                # Extract the result from the buffer
+                demodulated_frame = np.fromstring(demodulated_frame_buffer,
+                    dtype=np.uint8).reshape(
+                    frame_height, demodulated_frame_width)
+                
+                yield demodulated_frame
+
+class ChunkedTiffWriter:
+    """Writes frames to a series of tiff stacks"""
+    def __init__(self, output_directory, chunk_size=200,
+        chunk_name_pattern='chunk%08d.tif'):
+        """Initialize a new chunked tiff writer.
+        
+        output_directory : where to write the chunks
+        chunk_size : frames per chunk
+        chunk_name_pattern : how to name the chunk, using the number of
+            the first frame in it
+        """
+        self.output_directory = output_directory
+        self.chunk_size = chunk_size
+        self.chunk_name_pattern = chunk_name_pattern
+        
+        # Initialize counters so we know what frame and chunk we're on
+        self.frames_written = 0
+        self.frame_buffer = []
+    
+    def write(self, frame):
+        """Buffered write frame to tiff stacks"""
+        # Append to buffer
+        self.frame_buffer.append(frame)
+        
+        # Write chunk if buffer is full
+        if len(self.frame_buffer) == self.chunk_size:
+            self._write_chunk()
+
+    def _write_chunk(self):
+        if len(self.frame_buffer) != 0:
+            # Form the chunk
+            chunk = np.array(self.frame_buffer)
+            
+            # Name it
+            chunkname = os.path.join(output_directory,
+                self.chunk_name_pattern % self.frames_written)
+            
+            # Write it
+            tifffile.imsave(chunkname, chunk, compress=0)
+            
+            # Update the counter
+            self.frames_written += len(self.frame_buffer)
+            self.frame_buffer = []        
+    
+    def close(self):
+        """Finish writing any final unfinished chunk"""
+        self._write_chunk()
+
+
+class FFmpegWriter:
+    """Writes frames to an ffmpeg compression process"""
+    def __init__(self, output_filename, frame_width, frame_height,
+        output_fps=30, vcodec='ffv1', pix_fmt='gray', qp=15, preset='medium'):
+        """Initialize the ffmpeg writer
+        
+        output_filename : name of output file
+        frame_width, frame_height : Used to inform ffmpeg how to interpret
+            the data coming in the stdin pipe
+        output_fps : frame rate
+        pix_fmt : Tell ffmpeg how to interpret the raw data on the pipe
+            This should match the output generated by frame.tostring()
+        crf : quality. 0 means lossless
+        preset : speed/compression tradeoff
+        
+        With old versions of ffmpeg (jon-severinsson) I was not able to get
+        truly lossless encoding with libx264. It was clamping the luminances to
+        16..235. Some weird YUV conversion? 
+        '-vf', 'scale=in_range=full:out_range=full' seems to help with this
+        In any case it works with new ffmpeg. Also the codec ffv1 will work
+        but is slightly larger filesize.
+        """
+        # Open an ffmpeg process
+        cmdstring = ('ffmpeg', 
+            '-y', '-r', '%d' % output_fps,
+            '-s', '%dx%d' % (frame_width, frame_height), # size of image string
+            '-pix_fmt', pix_fmt, # format
+            '-f', 'rawvideo',  '-i', '-', # raw video from the pipe
+            '-vcodec', vcodec,
+            '-qp', str(qp), 
+            '-preset', preset,
+            output_filename) # output encoding
+        self.ffmpeg_proc = subprocess.Popen(cmdstring, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    def write(self, frame):
+        """Write a frame to the ffmpeg process"""
+        self.ffmpeg_proc.stdin.write(frame.tostring())
+    
+    def close(self):
+        """Closes the ffmpeg process and returns stdout, stderr"""
+        return self.ffmpeg_proc.communicate()

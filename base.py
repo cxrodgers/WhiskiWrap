@@ -390,6 +390,7 @@ class PFReader:
         
         # Create variable to store timestamps
         self.timestamps = []
+        self.n_frames_read = 0
     
     def iter_frames(self):
         """Yields frames as they are read and demodulated.
@@ -452,6 +453,8 @@ class PFReader:
                 demodulated_frame = np.fromstring(demodulated_frame_buffer,
                     dtype=np.uint8).reshape(
                     frame_height, demodulated_frame_width)
+                
+                self.n_frames_read = self.n_frames_read + 1
                 
                 yield demodulated_frame
 
@@ -630,7 +633,7 @@ class FFmpegWriter:
             '-preset', preset,
             output_filename) # output encoding
         self.ffmpeg_proc = subprocess.Popen(cmdstring, stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout=subprocess.PIPE)#, stderr=subprocess.PIPE)
     
     def write(self, frame):
         """Write a frame to the ffmpeg process"""

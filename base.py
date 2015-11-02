@@ -636,6 +636,9 @@ class FFmpegWriter:
         """Write a frame to the ffmpeg process"""
         self.ffmpeg_proc.stdin.write(frame.tostring())
     
+    def write_bytes(self, bytestring):
+        self.ffmpeg_proc.stdin.write(bytestring)
+    
     def close(self):
         """Closes the ffmpeg process and returns stdout, stderr"""
         return self.ffmpeg_proc.communicate()

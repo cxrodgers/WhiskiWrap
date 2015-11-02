@@ -249,6 +249,61 @@ def pipeline_trace(input_vfile, h5_filename,
                 chunk_start=chunk_start)
 
 
+def write_video_as_chunked_tiffs(input_reader, tiffs_to_trace_directory,
+    chunk_size=200, chunk_name_pattern='chunk%08d.tif',
+    stop_after_frame=None, monitor_video=None, timestamps_filename=None,
+    monitor_video_kwargs=None):
+    """Write frames to disk as tiff stacks
+    
+    input_reader : object providing .iter_frames() method and perhaps
+        also a .timestamps attribute. For instance, PFReader, or some
+        FFmpegReader object.
+    tiffs_to_trace_directory : where to store the chunked tiffs
+    stop_after_frame : to stop early
+    monitor_video : if not None, should be a filename to write a movie to
+    timestamps_filename : if not None, should be the name to write timestamps
+    monitor_video_kwargs : ffmpeg params
+    
+    Returns: ChunkedTiffWriter object    
+    """
+    # Tiff writer
+    ctw = WhiskiWrap.ChunkedTiffWriter(tiffs_to_trace_directory,
+        chunk_size=chunk_size, chunk_name_pattern=chunk_name_pattern)
+
+    # FFmpeg writer is initalized after first frame
+    ffw = None
+
+    # Iterate over frames
+    for nframe, frame in enumerate(input_reader.iter_frames()):
+        # Stop early?
+        if stop_after_frame is not None and nframe >= stop_after_frame:
+            break
+        
+        # Write to chunked tiff
+        ctw.write(frame)
+        
+        # Optionally write to monitor video
+        if monitor_video is not None:
+            # Initialize ffw after first frame so we know the size
+            if ffw is None:
+                ffw = WhiskiWrap.FFmpegWriter(monitor_video, 
+                    frame_width=frame.shape[1], frame_height=frame.shape[0],
+                    **monitor_video_kwargs)
+            ffw.write(frame)
+
+    # Finalize writers
+    ctw.close()
+    if ffw is not None:
+        ff_stdout, ff_stderr = ffw.close()
+
+    # Also write timestamps as numpy file
+    if hasattr(input_reader, 'timestamps') and timestamps_filename is not None:
+        timestamps = np.concatenate(input_reader.timestamps)
+        assert len(timestamps) >= ctw.frames_written
+        np.save(timestamps_filename, timestamps[:ctw.frames_written])
+
+    return ctw
+
 def trace_chunked_tiffs(input_tiff_directory, h5_filename,
     n_trace_processes=4, expectedrows=1000000,
     ):

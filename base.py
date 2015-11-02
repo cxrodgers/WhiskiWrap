@@ -505,7 +505,16 @@ class ChunkedTiffWriter:
 
 class FFmpegReader:
     """Reads frames from a video file using ffmpeg process"""
-    def __init__(self, input_filename, pix_fmt='gray', bufsize=10**9):
+    def __init__(self, input_filename, pix_fmt='gray', bufsize=10**9,
+        duration=None):
+        """Initialize a new reader
+        
+        input_filename : name of file
+        pix_fmt : used to format the raw data coming from ffmpeg into
+            a numpy array
+        bufsize : probably not necessary because we read one frame at a time
+        duration : duration of video to read (-t parameter)
+        """
         self.input_filename = input_filename
     
         # Get params
@@ -526,7 +535,11 @@ class FFmpegReader:
         command = ['ffmpeg', 
             '-i', input_filename,
             '-f', 'image2pipe',
-            '-pix_fmt', pix_fmt,
+            '-pix_fmt', pix_fmt]
+        if duration is not None:
+            command += [
+                '-t', str(duration),]
+        command += [
             '-vcodec', 'rawvideo', '-']
         
         # To store result
@@ -534,33 +547,54 @@ class FFmpegReader:
 
         # Init the pipe
         # We set stderr to PIPE to keep it from writing to screen
+        # And we set stdin to PIPE to keep it from breaking our STDIN
         self.ffmpeg_proc = subprocess.Popen(command, 
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
             bufsize=bufsize)
 
     def iter_frames(self):
-        # Read this_chunk, or as much as we can
-        raw_image = self.ffmpeg_proc.stdout.read(self.read_size_per_frame)
-
-        # check if we ran out of frames
-        if len(raw_image) != self.read_size_per_frame:
-            self.stdout, self.stderr = self.ffmpeg_proc.communicate()
-            return
+        """Yields one frame at a time
         
-        # Convert to array
-        flattened_im = np.fromstring(raw_image, dtype='uint8')
-        if self.bytes_per_pixel == 1:
-            frame = flattened_im.reshape(
-                (self.frame_height, self.frame_width))
-        else:
-            frame = flattened_im.reshape(
-                (self.frame_height, self.frame_width, self.bytes_per_pixel))
+        When done: terminates ffmpeg process, and stores any remaining
+        results in self.leftover_bytes and self.stdout and self.stderr
+        
+        It might be worth writing this as a chunked reader if this is too
+        slow. Also we need to be able to seek through the file.
+        """
+        # Read this_chunk, or as much as we can
+        while(True):
+            raw_image = self.ffmpeg_proc.stdout.read(self.read_size_per_frame)
 
-        # Update
-        self.n_frames_read = self.n_frames_read + 1
+            # check if we ran out of frames
+            if len(raw_image) != self.read_size_per_frame:
+                self.leftover_bytes = raw_image
+                self.close()
+                return
+        
+            # Convert to array
+            flattened_im = np.fromstring(raw_image, dtype='uint8')
+            if self.bytes_per_pixel == 1:
+                frame = flattened_im.reshape(
+                    (self.frame_height, self.frame_width))
+            else:
+                frame = flattened_im.reshape(
+                    (self.frame_height, self.frame_width, self.bytes_per_pixel))
 
-        # Yield
-        yield frame
+            # Update
+            self.n_frames_read = self.n_frames_read + 1
+
+            # Yield
+            yield frame
+    
+    def close(self):
+        """Closes the process"""
+        # Need to terminate in case there is more data but we don't
+        # care about it
+        self.ffmpeg_proc.terminate()
+        
+        # Extract the leftover bits
+        self.stdout, self.stderr = self.ffmpeg_proc.communicate()
     
 
 class FFmpegWriter:

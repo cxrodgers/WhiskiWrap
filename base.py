@@ -503,6 +503,65 @@ class ChunkedTiffWriter:
         """Finish writing any final unfinished chunk"""
         self._write_chunk()
 
+class FFmpegReader:
+    """Reads frames from a video file using ffmpeg process"""
+    def __init__(self, input_filename, pix_fmt='gray', bufsize=10**9):
+        self.input_filename = input_filename
+    
+        # Get params
+        self.frame_width, self.frame_height, self.frame_rate = \
+            WhiskiWrap.video_utils.get_video_params(input_filename)
+        
+        # Set up pix_fmt
+        if pix_fmt == 'gray':
+            self.bytes_per_pixel = 1
+        elif pix_fmt == 'rgb24':
+            self.bytes_per_pixel = 3
+        else:
+            raise ValueError("can't handle pix_fmt:", pix_fmt)
+        self.read_size_per_frame = self.bytes_per_pixel * \
+            self.frame_width * self.frame_height
+        
+        # Create the command
+        command = ['ffmpeg', 
+            '-i', input_filename,
+            '-f', 'image2pipe',
+            '-pix_fmt', pix_fmt,
+            '-vcodec', 'rawvideo', '-']
+        
+        # To store result
+        self.n_frames_read = 0
+
+        # Init the pipe
+        # We set stderr to PIPE to keep it from writing to screen
+        self.ffmpeg_proc = subprocess.Popen(command, 
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+            bufsize=bufsize)
+
+    def iter_frames(self):
+        # Read this_chunk, or as much as we can
+        raw_image = self.ffmpeg_proc.stdout.read(self.read_size_per_frame)
+
+        # check if we ran out of frames
+        if len(raw_image) != self.read_size_per_frame:
+            self.stdout, self.stderr = self.ffmpeg_proc.communicate()
+            return
+        
+        # Convert to array
+        flattened_im = np.fromstring(raw_image, dtype='uint8')
+        if self.bytes_per_pixel == 1:
+            frame = flattened_im.reshape(
+                (self.frame_height, self.frame_width))
+        else:
+            frame = flattened_im.reshape(
+                (self.frame_height, self.frame_width, self.bytes_per_pixel))
+
+        # Update
+        self.n_frames_read = self.n_frames_read + 1
+
+        # Yield
+        yield frame
+    
 
 class FFmpegWriter:
     """Writes frames to an ffmpeg compression process"""

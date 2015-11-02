@@ -18,6 +18,10 @@ import tables
 from whisk.python import trace
 import pandas
 import WhiskiWrap
+import my
+import scipy.io
+import ctypes
+import glob
 
 # Find the repo directory and the default param files
 DIRECTORY = os.path.split(__file__)[0]
@@ -245,6 +249,50 @@ def pipeline_trace(input_vfile, h5_filename,
                 chunk_start=chunk_start)
 
 
+def trace_chunked_tiffs(input_tiff_directory, h5_filename,
+    n_trace_processes=4, expectedrows=1000000,
+    ):
+    """Trace tiffs that have been written to disk in parallel and stitch.
+    
+    input_tiff_directory : directory containing tiffs
+    h5_filename : output HDF5 file
+    n_trace_processes : how many simultaneous processes to use for tracing
+    expectedrows : used to set up hdf5 file
+    """
+    WhiskiWrap.utils.probe_needed_commands()
+    
+    # Setup the result file
+    setup_hdf5(h5_filename, expectedrows)
+    
+    # The tiffs have been written, figure out which they are
+    tif_file_number_strings = my.misc.apply_and_filter_by_regex(
+        '^chunk(\d+).tif$', os.listdir(input_tiff_directory), sort=False)
+    tif_full_filenames = [
+        os.path.join(input_tiff_directory, 'chunk%s.tif' % fns)
+        for fns in tif_file_number_strings]
+    tif_file_numbers = map(int, tif_file_number_strings)
+    tif_ordering = np.argsort(tif_file_numbers)
+    tif_sorted_filenames = np.array(tif_full_filenames)[
+        tif_ordering]
+    tif_sorted_file_numbers = np.array(tif_file_numbers)[
+        tif_ordering]
+
+    # trace each
+    print "Tracing"
+    pool = multiprocessing.Pool(n_trace_processes)        
+    trace_res = pool.map(trace_chunk, tif_sorted_filenames)
+    pool.close()
+    
+    # stitch
+    print "Stitching"
+    for chunk_start, chunk_name in zip(tif_sorted_file_numbers, tif_sorted_filenames):
+        # Append each chunk to the hdf5 file
+        fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(chunk_name)
+        append_whiskers_to_hdf5(
+            whisk_filename=fn.whiskers,
+            h5_filename=h5_filename, 
+            chunk_start=chunk_start)
+
 
 class PFReader:
     """Reads photonfocus modulated data stored in matlab files"""
@@ -386,7 +434,7 @@ class ChunkedTiffWriter:
             chunk = np.array(self.frame_buffer)
             
             # Name it
-            chunkname = os.path.join(output_directory,
+            chunkname = os.path.join(self.output_directory,
                 self.chunk_name_pattern % self.frames_written)
             
             # Write it

@@ -391,6 +391,10 @@ class PFReader:
         # Create variable to store timestamps
         self.timestamps = []
         self.n_frames_read = 0
+        
+        # Set these values once they are read from the file
+        self.frame_height = None
+        self.frame_width = None
     
     def iter_frames(self):
         """Yields frames as they are read and demodulated.
@@ -401,6 +405,9 @@ class PFReader:
         The chunk of timestamps from each matfile is appended to the list
         self.timestamps, so that self.timestamps is a list of arrays. There
         will be more timestamps than read frames until the end of the chunk.
+        
+        Also sets self.frame_height and self.frame_width and checks that
+        they are consistent over the session.
         """
         # Iterate through matfiles and load
         for matfile_name in self.sorted_matfile_names:
@@ -428,6 +435,16 @@ class PFReader:
             else:
                 raise ValueError("unknown modulated width: %d" %
                     modulated_frame_width)
+            
+            # Store the frame sizes as necessary
+            if self.frame_width is None:
+                self.frame_width = demodulated_frame_width
+            if self.frame_width != demodulated_frame_width:
+                raise ValueError("inconsistent frame widths")
+            if self.frame_height is None:
+                self.frame_height = frame_height
+            if self.frame_height != frame_height:
+                raise ValueError("inconsistent frame heights")            
             
             # Create a buffer for the result of each frame
             demodulated_frame_buffer = ctypes.create_string_buffer(

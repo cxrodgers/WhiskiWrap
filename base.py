@@ -570,11 +570,11 @@ class FFmpegReader:
         self.n_frames_read = 0
 
         # Init the pipe
-        # We set stderr to PIPE to keep it from writing to screen
+        # We set stderr to null so it doesn't fill up screen or buffers
         # And we set stdin to PIPE to keep it from breaking our STDIN
         self.ffmpeg_proc = subprocess.Popen(command, 
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+            stdout=subprocess.PIPE, stderr=open(os.devnull, 'w'), 
             bufsize=bufsize)
 
     def iter_frames(self):

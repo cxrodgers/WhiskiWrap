@@ -474,6 +474,10 @@ class PFReader:
                 self.n_frames_read = self.n_frames_read + 1
                 
                 yield demodulated_frame
+    
+    def close(self):
+        """Currently does nothing"""
+        pass
 
 class ChunkedTiffWriter:
     """Writes frames to a series of tiff stacks"""
@@ -620,7 +624,7 @@ class FFmpegReader:
 class FFmpegWriter:
     """Writes frames to an ffmpeg compression process"""
     def __init__(self, output_filename, frame_width, frame_height,
-        output_fps=30, vcodec='ffv1', pix_fmt='gray', qp=15, preset='medium'):
+        output_fps=30, vcodec='libx264', pix_fmt='gray', qp=15, preset='medium'):
         """Initialize the ffmpeg writer
         
         output_filename : name of output file

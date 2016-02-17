@@ -432,6 +432,8 @@ class PFReader:
             # but I don't understand what it's doing.
             if modulated_frame_width == 416:
                 demodulated_frame_width = 800
+            elif modulated_frame_width == 332:
+                demodulated_frame_width = 640
             else:
                 raise ValueError("unknown modulated width: %d" %
                     modulated_frame_width)

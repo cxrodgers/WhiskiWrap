@@ -38,7 +38,7 @@ class WhiskerSeg(tables.IsDescription):
     fol_x = tables.Float32Col()
     fol_y = tables.Float32Col()
     pixlen = tables.UInt16Col()
-    chunk_start = tables.UInt16Col()
+    chunk_start = tables.UInt32Col()
 
 def write_chunk(chunk, chunkname, directory='.'):
     tifffile.imsave(os.path.join(directory, chunkname), chunk, compress=0)

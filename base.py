@@ -25,6 +25,7 @@ import my
 import scipy.io
 import ctypes
 import glob
+import time
 
 # Find the repo directory and the default param files
 DIRECTORY = os.path.split(__file__)[0]
@@ -82,8 +83,13 @@ def trace_chunk(video_filename):
         print raw_filename
         raise IOError("tracing seems to have failed")
     
-    return stdout, stderr
+    return {'video_filename': video_filename, 'stdout': stdout, 'stderr': stderr}
 
+
+def sham_trace_chunk(video_filename):
+    print "sham tracing", video_filename
+    time.sleep(2)
+    return video_filename
 
 def setup_hdf5(h5_filename, expectedrows):
 
@@ -190,8 +196,8 @@ def pipeline_trace(input_vfile, h5_filename,
     setup_hdf5(h5_filename, expectedrows)
 
     # Figure out how many frames and epochs
-    duration = WhiskiWrap.video_utils.get_video_duration(input_vfile)
-    frame_rate = WhiskiWrap.video_utils.get_video_params(input_vfile)[2]
+    duration = my.video.get_video_duration2(input_vfile)
+    frame_rate = my.video.get_video_params(input_vfile)[2]
     total_frames = int(np.rint(duration * frame_rate))
     if frame_stop is None:
         frame_stop = total_frames
@@ -352,6 +358,142 @@ def trace_chunked_tiffs(input_tiff_directory, h5_filename,
             chunk_start=chunk_start)
 
 
+def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
+    chunk_size=200, chunk_name_pattern='chunk%08d.tif',
+    stop_after_frame=None, monitor_video=None, timestamps_filename=None,
+    monitor_video_kwargs=None,
+    h5_filename=None,
+    n_trace_processes=4, expectedrows=1000000,    
+    verbose=True
+    ):
+    """Read, write, and trace each chunk one at a time.
+    
+    This is an alternative to first calling:
+        write_video_as_chunked_tiffs
+    And then calling
+        trace_chunked_tiffs
+    """
+    # Check commands
+    WhiskiWrap.utils.probe_needed_commands()
+    
+    ## Initialize readers and writers
+    if verbose:
+        print "initalizing readers and writers"
+    # Tiff writer
+    ctw = WhiskiWrap.ChunkedTiffWriter(tiffs_to_trace_directory,
+        chunk_size=chunk_size, chunk_name_pattern=chunk_name_pattern)
+
+    # FFmpeg writer is initalized after first frame
+    ffw = None
+
+    # Setup the result file
+    setup_hdf5(h5_filename, expectedrows)
+    
+    ## Set up the worker pool
+    # Pool of trace workers
+    trace_pool = multiprocessing.Pool(n_trace_processes)        
+    
+    # Keep track of results
+    trace_pool_results = []
+    def log_result(result):
+        trace_pool_results.append(result)
+    
+    ## Iterate over chunks
+    out_of_frames = False
+    nframe = 0
+    while not out_of_frames:
+        # Get a chunk of frames
+        if verbose:
+            print "loading chunk of frames"
+        chunk_of_frames = []
+        for frame in input_reader.iter_frames():
+            chunk_of_frames.append(frame)
+            nframe = nframe + 1
+            if stop_after_frame is not None and nframe >= stop_after_frame:
+                break
+            if len(chunk_of_frames) == chunk_size:
+                break
+    
+        # Check if we ran out
+        if len(chunk_of_frames) != chunk_size:
+            out_of_frames = True
+                
+        ## Write tiffs
+        # We do this synchronously to ensure that it happens before
+        # the trace starts
+        if verbose:
+            print "writing tiffs"
+        for frame in chunk_of_frames:
+            ctw.write(frame)        
+        
+        # Make sure the chunk was written, in case this is the last one
+        # and we didn't reach chunk_size yet
+        if len(chunk_of_frames) != chunk_size:
+            ctw._write_chunk()
+        assert ctw.count_unwritten_frames() == 0
+
+        # Figure out which tiff file was just generated
+        tif_filename = ctw.chunknames_written[-1]
+        
+        ## Start trace
+        if verbose:
+            print "adding to trace pool"
+        trace_pool.apply_async(trace_chunk, args=(tif_filename,),
+            callback=log_result)
+        
+        ## Start monitor encode
+        # This is also synchronous, otherwise the input buffer might fill up
+        if monitor_video is not None:        
+            if ffw is None:
+                ffw = WhiskiWrap.FFmpegWriter(monitor_video, 
+                    frame_width=frame.shape[1], frame_height=frame.shape[0],
+                    **monitor_video_kwargs)
+            ffw.write(frame)        
+    
+    ## Wait for trace to complete
+    # Tell it no more jobs, so close when done
+    trace_pool.close()
+    
+    # Wait for everything to finish
+    trace_pool.join()
+    
+    # The tiffs have been written, figure out which they are
+    tif_file_number_strings = my.misc.apply_and_filter_by_regex(
+        '^chunk(\d+).tif$', os.listdir(tiffs_to_trace_directory), sort=False)
+    tif_full_filenames = [
+        os.path.join(tiffs_to_trace_directory, 'chunk%s.tif' % fns)
+        for fns in tif_file_number_strings]
+    tif_file_numbers = map(int, tif_file_number_strings)
+    tif_ordering = np.argsort(tif_file_numbers)
+    tif_sorted_filenames = np.array(tif_full_filenames)[
+        tif_ordering]
+    tif_sorted_file_numbers = np.array(tif_file_numbers)[
+        tif_ordering]
+    
+    #~ # stitch
+    #~ print "Stitching"
+    #~ for chunk_start, chunk_name in zip(tif_sorted_file_numbers, tif_sorted_filenames):
+        #~ # Append each chunk to the hdf5 file
+        #~ fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(chunk_name)
+        #~ append_whiskers_to_hdf5(
+            #~ whisk_filename=fn.whiskers,
+            #~ h5_filename=h5_filename, 
+            #~ chunk_start=chunk_start)
+
+    # Finalize writers
+    ctw.close()
+    if ffw is not None:
+        ff_stdout, ff_stderr = ffw.close()
+
+    # Also write timestamps as numpy file
+    if hasattr(input_reader, 'timestamps') and timestamps_filename is not None:
+        timestamps = np.concatenate(input_reader.timestamps)
+        assert len(timestamps) >= ctw.frames_written
+        np.save(timestamps_filename, timestamps[:ctw.frames_written])
+
+    return trace_pool_results   
+    
+
 class PFReader:
     """Reads photonfocus modulated data stored in matlab files"""
     def __init__(self, input_directory, n_threads=4):
@@ -505,6 +647,7 @@ class ChunkedTiffWriter:
         # Initialize counters so we know what frame and chunk we're on
         self.frames_written = 0
         self.frame_buffer = []
+        self.chunknames_written = []
     
     def write(self, frame):
         """Buffered write frame to tiff stacks"""
@@ -530,6 +673,13 @@ class ChunkedTiffWriter:
             # Update the counter
             self.frames_written += len(self.frame_buffer)
             self.frame_buffer = []        
+            
+            # Update the list of written chunks
+            self.chunknames_written.append(chunkname)
+    
+    def count_unwritten_frames(self):
+        """Returns the number of buffered, unwritten frames"""
+        return len(self.frame_buffer)
     
     def close(self):
         """Finish writing any final unfinished chunk"""
@@ -556,7 +706,7 @@ class FFmpegReader:
     
         # Get params
         self.frame_width, self.frame_height, self.frame_rate = \
-            WhiskiWrap.video_utils.get_video_params(input_filename)
+            my.video.get_video_params(input_filename)
         
         # Set up pix_fmt
         if pix_fmt == 'gray':

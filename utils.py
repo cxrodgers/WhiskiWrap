@@ -65,8 +65,8 @@ class FileNamer(object):
     @classmethod
     def from_tiff_stack(self, tiff_stack_filename):
         """Generates FileNamer based on an existing tiff stack"""
-        if not os.path.exists(tiff_stack_filename):
-            print "warning: nonexistent tiff stack %s" % tiff_stack_filename        
+        #~ if not os.path.exists(tiff_stack_filename):
+            #~ print "warning: nonexistent tiff stack %s" % tiff_stack_filename        
         basename, ext = os.path.splitext(tiff_stack_filename)
         if ext != '.tif':
             raise ValueError("%s is not a *.tif stack" % tiff_stack_filename)

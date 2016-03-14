@@ -520,9 +520,9 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
                 ffw.write(frame)        
         
         ## Determine if we should pause
-        while len(ctw.chunknames_written) > len(trace_pool_results) + 10:
+        while len(ctw.chunknames_written) > len(trace_pool_results) + 2 * n_trace_processes:
             print "waiting for tracing to catch up"
-            time.sleep(3)
+            time.sleep(30)
     
     ## Wait for trace to complete
     if verbose:

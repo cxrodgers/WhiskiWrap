@@ -29,15 +29,23 @@ import time
 import shutil
 
 # Find the repo directory and the default param files
+# The banks don't differe with sensitive or default
 DIRECTORY = os.path.split(__file__)[0]
 PARAMETERS_FILE = os.path.join(DIRECTORY, 'default.parameters')
+SENSITIVE_PARAMETERS_FILE = os.path.join(DIRECTORY, 'sensitive.parameters')
 HALFSPACE_DB_FILE = os.path.join(DIRECTORY, 'halfspace.detectorbank')
 LINE_DB_FILE = os.path.join(DIRECTORY, 'line.detectorbank')
 
-def copy_parameters_files(target_directory):
+def copy_parameters_files(target_directory, sensitive=False):
     """Copies in parameters and banks"""
-    shutil.copyfile(PARAMETERS_FILE, os.path.join(target_directory,
-        'default.parameters'))
+    if sensitive:
+        shutil.copyfile(SENSITIVE_PARAMETERS_FILE, os.path.join(target_directory,
+            'default.parameters'))
+    else:
+        shutil.copyfile(PARAMETERS_FILE, os.path.join(target_directory,
+            'default.parameters'))
+    
+    # Banks are the same regardless
     shutil.copyfile(HALFSPACE_DB_FILE, os.path.join(target_directory,
         'halfspace.detectorbank'))
     shutil.copyfile(LINE_DB_FILE, os.path.join(target_directory,
@@ -371,6 +379,7 @@ def trace_chunked_tiffs(input_tiff_directory, h5_filename,
 
 
 def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
+    sensitive=False,
     chunk_size=200, chunk_name_pattern='chunk%08d.tif',
     stop_after_frame=None, delete_tiffs=True,
     timestamps_filename=None, monitor_video=None, 
@@ -388,6 +397,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     
     input_reader : Typically a PFReader or FFmpegReader
     tiffs_to_trace_directory : Location to write the tiffs
+    sensitive: if False, use default. If True, lower MIN_SIGNAL
     chunk_size : frames per chunk
     chunk_name_pattern : how to name them
     stop_after_frame : break early, for debugging
@@ -435,7 +445,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     setup_hdf5(h5_filename, expectedrows)
     
     # Copy the parameters files
-    copy_parameters_files(tiffs_to_trace_directory)
+    copy_parameters_files(tiffs_to_trace_directory, sensitive=sensitive)
     
     ## Set up the worker pool
     # Pool of trace workers

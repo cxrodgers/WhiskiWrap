@@ -460,12 +460,16 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     ## Iterate over chunks
     out_of_frames = False
     nframe = 0
+    
+    # Init the iterator outside of the loop so that it persists
+    iter_obj = input_reader.iter_frames()
+    
     while not out_of_frames:
         # Get a chunk of frames
         if verbose:
             print "loading chunk of frames starting with ", nframe
         chunk_of_frames = []
-        for frame in input_reader.iter_frames():
+        for frame in iter_obj:
             if frame_func is not None:
                 frame = frame_func(frame)
             chunk_of_frames.append(frame)
@@ -589,7 +593,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
 
 class PFReader:
     """Reads photonfocus modulated data stored in matlab files"""
-    def __init__(self, input_directory, n_threads=4):
+    def __init__(self, input_directory, n_threads=4, verbose=True):
         """Initialize a new reader.
         
         input_directory : where the mat files are
@@ -599,6 +603,7 @@ class PFReader:
         n_threads : sent to pfDoubleRate_SetNrOfThreads
         """
         self.input_directory = input_directory
+        self.verbose = verbose
 
         # Load the library
         libboost_thread = ctypes.cdll.LoadLibrary(
@@ -649,6 +654,9 @@ class PFReader:
         """
         # Iterate through matfiles and load
         for matfile_name in self.sorted_matfile_names:
+            if self.verbose:
+                print "loading %s" % matfile_name
+            
             # Load the raw data
             # This is the slowest step
             matfile_load = scipy.io.loadmat(matfile_name)
@@ -664,6 +672,10 @@ class PFReader:
             assert matfile_modulated_data.shape[-1] == n_frames
             modulated_frame_width = matfile_modulated_data.shape[1]
             frame_height = matfile_modulated_data.shape[0]
+            
+            if self.verbose:
+                print "loaded %d modulated frames @ %dx%d" % (n_frames,
+                    modulated_frame_width, frame_height)
             
             # Find the demodulated width
             # This can be done by pfDoubleRate_GetDeModulatedWidth
@@ -692,6 +704,9 @@ class PFReader:
             
             # Iterate over frames
             for n_frame in range(n_frames):
+                if self.verbose and np.mod(n_frame, 200) == 0:
+                    print "iterator has reached frame %d" % n_frame
+                
                 # Convert image to char array
                 # Ideally we would use a buffer here instead of a copy in order
                 # to save time. But Matlab data comes back in Fortran order 
@@ -714,6 +729,9 @@ class PFReader:
                 self.n_frames_read = self.n_frames_read + 1
                 
                 yield demodulated_frame
+        
+        if self.verbose:
+            print "iterator is empty"
     
     def close(self):
         """Currently does nothing"""
@@ -890,10 +908,14 @@ class FFmpegReader:
         """Closes the process"""
         # Need to terminate in case there is more data but we don't
         # care about it
-        self.ffmpeg_proc.terminate()
+        # But if it's already terminated, don't try to terminate again
+        if self.ffmpeg_proc.returncode is None:
+            self.ffmpeg_proc.terminate()
         
-        # Extract the leftover bits
-        self.stdout, self.stderr = self.ffmpeg_proc.communicate()
+            # Extract the leftover bits
+            self.stdout, self.stderr = self.ffmpeg_proc.communicate()
+        
+        return self.ffmpeg_proc.returncode
     
     def isclosed(self):
         if hasattr(self.ffmpeg_proc, 'returncode'):

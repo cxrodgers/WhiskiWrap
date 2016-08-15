@@ -21,7 +21,7 @@ import tables
 try:
     from whisk.python import trace
 except ImportError:
-    pass
+    print "cannot import whisk"
 import pandas
 import WhiskiWrap
 import my

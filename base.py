@@ -6,7 +6,10 @@ import numpy as np
 import subprocess
 import multiprocessing
 import tables
-from whisk.python import trace
+try:
+    from whisk.python import trace
+except ImportError:
+    print "cannot import whisk"
 import pandas
 import WhiskiWrap
 

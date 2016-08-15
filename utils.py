@@ -1,3 +1,12 @@
+"""Utility functions for WhiskiWrap
+
+FileNamer defines the naming convention for whiski-related files. This is
+not really mandatory but is used by the pipeline_trace function in base.
+
+The other utility functions are for probing the availability of needed
+system commands: ffmpeg, trace.
+"""
+
 import os
 import subprocess
 
@@ -56,8 +65,8 @@ class FileNamer(object):
     @classmethod
     def from_tiff_stack(self, tiff_stack_filename):
         """Generates FileNamer based on an existing tiff stack"""
-        if not os.path.exists(tiff_stack_filename):
-            print "warning: nonexistent tiff stack %s" % tiff_stack_filename        
+        #~ if not os.path.exists(tiff_stack_filename):
+            #~ print "warning: nonexistent tiff stack %s" % tiff_stack_filename        
         basename, ext = os.path.splitext(tiff_stack_filename)
         if ext != '.tif':
             raise ValueError("%s is not a *.tif stack" % tiff_stack_filename)

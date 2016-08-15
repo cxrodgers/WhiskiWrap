@@ -1,4 +1,12 @@
-"""Tests of functionality in WhiskiWrap"""
+"""Functions for running tests and/or benchmarks with WhiskiWrap.
+
+Each test is run in a session directory containing all the necessary
+files for that test.
+
+The function run_standard_benchmarks goes through a suite of tests. This
+tests that everything is working properly and also serves as an example
+of how to choose parameters and trace input videos.
+"""
 
 
 import os
@@ -51,7 +59,7 @@ def setup_session_directory(directory, input_video, force=False):
     
     return WhiskiWrap.utils.FileNamer.from_video(new_video_filename)
 
-def run_benchmarks(benchmark_params, test_root):
+def run_benchmarks(benchmark_params, test_root, force=False):
     """Run the benchmarks
     
     For every row in benchmark params, run a trace on the input video
@@ -74,7 +82,7 @@ def run_benchmarks(benchmark_params, test_root):
     for idx, test in benchmark_params.iterrows():
         print test['name']
         test_dir = os.path.expanduser(os.path.join(test_root, test['name']))
-        fn = setup_session_directory(test_dir, test['input_video'])
+        fn = setup_session_directory(test_dir, test['input_video'], force=force)
 
         # Run
         start_time = time.time()
@@ -96,11 +104,32 @@ def run_benchmarks(benchmark_params, test_root):
     
     return test_results, durations
 
-def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False):
+def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False,
+    input_video=None, n_frames=None, epoch_sz=None,
+    n_processes_l=(2, 4), chunk_size_l=(100, 300),
+    ):
     """Run a suite of standard benchmarks.
     
-    Gets files from repo. Sets standard params.
-    Calls run_benchmarks on the results
+    This function sets up a series of tests and then calls run_benchmarks
+    on those tests.
+    
+    test_root : directory to store test results. Will be overwritten.
+    force : if True, does not ask permission to overwrite anything
+    input_video : which video to use as a test.
+        Default: test_video165s.mp4 in the WhiskiWrap directory
+    n_frames : number of frames to process
+        Default: np.max(chunk_size_l) * np.max(n_process_l), that is, 
+        just enough that the largest chunks will use all the processes
+    epoch_sz : length of each epoch
+        Default: equal to n_frames
+    n_processes_l : a list of process numbers to test
+    chunk_size_l : a list of chunk sizes to test
+    
+    The number of frames and the epoch length is chosen to be 
+    np.max(chunk_size_l) * max_processes. It is assumed that additional
+    epochs would take the same time.
+    
+    Returns: test_results, durations
     """
     # Check we have commands we need
     WhiskiWrap.utils.probe_needed_commands()
@@ -110,21 +139,33 @@ def run_standard_benchmarks(test_root='~/whiski_wrap_test', force=False):
         force=force)
     
     # Find the video to use
-    vfile1 = os.path.join(WhiskiWrap.DIRECTORY, 'test_video_50s.mp4')
+    if input_video is None:
+        input_video = os.path.join(WhiskiWrap.DIRECTORY, 'test_video_165s.mp4')
+    
+    # Determine number of frames
+    if n_frames is None:
+        # Enough so that we use up all the processes on the largest chunk
+        n_frames = np.max(n_processes_l) * np.max(chunk_size_l)
+    if epoch_sz is None:
+        epoch_sz = n_frames    
     
     # Construct the tests
-    tests = pandas.DataFrame([
-        ['one_chunk', vfile1, 0, 10, 100, 100, 1],
-        ['one_chunk_offset', vfile1, 2, 10, 100, 100, 1],
-        ],
-        columns=(
-            'name', 'input_video', 'frame_start', 'frame_stop', 
-            'epoch_sz_frames', 'chunk_sz_frames', 'n_trace_processes'))
+    tests = []
+    for chunk_sz in chunk_size_l:
+        for n_process in n_processes_l:
+            test_name = '%d_frames_%d_chunksz_%d_procs' % (
+                n_frames, chunk_sz, n_process)
+            tests.append([test_name, input_video, 0, n_frames, epoch_sz,
+                chunk_sz, n_process])
+    tests_df = pandas.DataFrame(tests, columns=(
+        'name', 'input_video', 'frame_start', 'frame_stop', 
+        'epoch_sz_frames', 'chunk_sz_frames', 'n_trace_processes'))
 
     # Run the tests
-    test_results, durations = run_benchmarks(tests, test_root)
+    test_results, durations = run_benchmarks(tests_df, test_root)
+    tests_df['duration'] = durations
 
-    return test_results, durations
+    return test_results, tests_df
 
 def run_offset_test(test_root='~/whiski_wrap_test', start=1525, offset=5,
     n_frames=30, force=False):
@@ -180,20 +221,20 @@ def run_standard(test_root='~/whiski_wrap_test', force=False):
         force=force)
     
     # Find the video to use
-    vfile1 = os.path.join(WhiskiWrap.DIRECTORY, 'test_video2.mp4')    
+    vfile1 = os.path.join(WhiskiWrap.DIRECTORY, 'test_video_165s.mp4')    
 
     # Set up the test directory
     fn = setup_session_directory(os.path.join(test_root, 'standard'), vfile1)
 
     # Run the test
     start_time = time.time()
-    trace_chunk(fn.video('mp4'))
+    WhiskiWrap.trace_chunk(fn.video('mp4'))
     stop_time = time.time()
     standard_duration = stop_time - start_time
     
     # Stitch
-    setup_hdf5(fn.hdf5, expectedrows=100000)
-    append_whiskers_to_hdf5(
+    WhiskiWrap.setup_hdf5(fn.hdf5, expectedrows=100000)
+    WhiskiWrap.append_whiskers_to_hdf5(
         whisk_filename=fn.whiskers,
         h5_filename=fn.hdf5, 
         chunk_start=0)    

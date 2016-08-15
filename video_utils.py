@@ -1,4 +1,8 @@
-"""Utility functions for processing video"""
+"""Utility functions for processing video
+
+process_chunks_of_video : used in this module to load an input video with
+    ffmpeg and dump tiff stacks to disk of each chunk.
+"""
 import os
 import numpy as np
 import subprocess
@@ -14,6 +18,9 @@ def process_chunks_of_video(filename,
     frames_per_chunk=1000, bufsize=10**9,
     pix_fmt='gray', finalize='list'):
     """Read frames from video, apply function, return result
+    
+    This has some advantage over my.video.process_chunks_of_video
+    but is out of date and not really being used.
     
     The dataflow is:
     1) Use a pipe to ffmpeg to load chunks of frames_per_chunk frames
@@ -89,9 +96,10 @@ def process_chunks_of_video(filename,
     read_size_per_frame = bytes_per_pixel * image_w * image_h
     
     # ffmpeg requires start time and total time to be in seconds, not frames
-    # Add 10% of a frame so that it will round down to the correct frame
-    start_frame_time = (frame_start + 0.1) / float(frame_rate)
-    total_time = (n_frames + 0.1) / float(frame_rate)
+    # It seems to round up .. if I want start_time to be 0.0 and I set it to
+    # 0.003 (1/10th of a frame), then the first frame is skipped.
+    start_frame_time = (frame_start - 0.1) / float(frame_rate)
+    total_time = (n_frames + 0.2) / float(frame_rate)
     
     # Create the command
     command = ['ffmpeg', 
@@ -195,84 +203,3 @@ def process_chunks_of_video(filename,
         res = res_l
         
     return res
-
-def get_video_params(video_filename):
-    """Returns width, height, frame_rate of video using ffprobe"""
-    # Video duration and hence start time
-    proc = subprocess.Popen(['ffprobe', video_filename],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    res = proc.communicate()[0]
-
-    # Check if ffprobe failed, probably on a bad file
-    if 'Invalid data found when processing input' in res:
-        raise ValueError("Invalid data found by ffprobe in %s" % video_filename)
-    
-    # Find the video stream
-    width_height_l = []
-    frame_rate_l = []
-    for line in res.split("\n"):
-        # Skip lines that aren't stream info
-        if not line.strip().startswith("Stream #"):
-            continue
-        
-        # Check that this is a video stream
-        comma_split = line.split(',')
-        if " Video: " not in comma_split[0]:
-            continue
-        
-        # The third group should contain the size and aspect ratio
-        if len(comma_split) < 3:
-            raise ValueError("malform video stream string:", line)
-        
-        # The third group should contain the size and aspect, separated
-        # by spaces
-        size_and_aspect = comma_split[2].split()        
-        if len(size_and_aspect) == 0:
-            raise ValueError("malformed size/aspect:", comma_split[2])
-        size_string = size_and_aspect[0]
-        
-        # The size should be two numbers separated by x
-        width_height = size_string.split('x')
-        if len(width_height) != 2:
-            raise ValueError("malformed size string:", size_string)
-        
-        # Cast to int
-        width_height_l.append(map(int, width_height))
-    
-        # The fourth group in comma_split should be %f fps
-        frame_rate_fps = comma_split[4].split()
-        if frame_rate_fps[1] != 'fps':
-            raise ValueError("malformed frame rate:", frame_rate_fps)
-        frame_rate_l.append(float(frame_rate_fps[0]))
-    
-    if len(width_height_l) > 1:
-        print "warning: multiple video streams found, returning first"
-    return width_height_l[0][0], width_height_l[0][1], frame_rate_l[0]
-
-def get_video_duration(video_filename, return_as_timedelta=False):
-    """Return duration of video using ffprobe"""
-    # Video duration and hence start time
-    proc = subprocess.Popen(['ffprobe', video_filename],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    res = proc.communicate()[0]
-
-    # Check if ffprobe failed, probably on a bad file
-    if 'Invalid data found when processing input' in res:
-        raise ValueError(
-            "Invalid data found by ffprobe in %s" % video_filename)
-
-    # Parse out start time
-    duration_match = re.search("Duration: (\S+),", res)
-    assert duration_match is not None and len(duration_match.groups()) == 1
-    video_duration_temp = datetime.datetime.strptime(
-        duration_match.groups()[0], '%H:%M:%S.%f')
-    video_duration = datetime.timedelta(
-        hours=video_duration_temp.hour, 
-        minutes=video_duration_temp.minute, 
-        seconds=video_duration_temp.second,
-        microseconds=video_duration_temp.microsecond)    
-    
-    if return_as_timedelta:
-        return video_duration
-    else:
-        return video_duration.total_seconds()

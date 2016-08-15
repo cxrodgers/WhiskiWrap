@@ -9,7 +9,10 @@ each chunk are loaded and combined into a single large HDF5 file for the
 entire video.
 """
 
-import tifffile
+try:
+    import tifffile
+except ImportError:
+    pass
 import os
 import numpy as np
 import subprocess

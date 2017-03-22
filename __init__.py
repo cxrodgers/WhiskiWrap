@@ -9,6 +9,9 @@ This module contains the following sub-modules:
     video_utils - functions for dealing with video files, usually via
         system calls to ffmpeg
 
+To read Photonfocus double-rate files, you need to install libpfdoublerate
+This requires libboost_thread 1.50 to be installed to /usr/local/lib
+And the libpfDoubleRate.so in this module's directory
 
 Here is an example workflow:
 

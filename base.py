@@ -392,7 +392,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     monitor_video_kwargs=None, write_monitor_ffmpeg_stderr_to_screen=False,
     h5_filename=None, frame_func=None,
     n_trace_processes=4, expectedrows=1000000,    
-    verbose=True
+    verbose=True, skip_stitch=False,
     ):
     """Read, write, and trace each chunk, one at a time.
     
@@ -421,6 +421,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     n_trace_processes : number of simultaneous trace processes
     expectedrows : how to set up hdf5 file
     verbose : verbose
+    skip_stitch : skip the stitching phase
     
     Returns: dict
         trace_pool_results : result of each call to trace
@@ -448,7 +449,8 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     ffw = None
 
     # Setup the result file
-    setup_hdf5(h5_filename, expectedrows)
+    if not skip_stitch:
+        setup_hdf5(h5_filename, expectedrows)
     
     # Copy the parameters files
     copy_parameters_files(tiffs_to_trace_directory, sensitive=sensitive)
@@ -569,14 +571,16 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
         tif_ordering]
     
     # stitch
-    print "Stitching"
-    for chunk_start, chunk_name in zip(tif_sorted_file_numbers, tif_sorted_filenames):
-        # Append each chunk to the hdf5 file
-        fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(chunk_name)
-        append_whiskers_to_hdf5(
-            whisk_filename=fn.whiskers,
-            h5_filename=h5_filename, 
-            chunk_start=chunk_start)
+    if not skip_stitch:
+        print "Stitching"
+        zobj = zip(tif_sorted_file_numbers, tif_sorted_filenames)
+        for chunk_start, chunk_name in zobj:
+            # Append each chunk to the hdf5 file
+            fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(chunk_name)
+            append_whiskers_to_hdf5(
+                whisk_filename=fn.whiskers,
+                h5_filename=h5_filename, 
+                chunk_start=chunk_start)
 
     # Finalize writers
     ctw.close()
@@ -594,6 +598,8 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     return {'trace_pool_results': trace_pool_results,
         'monitor_ff_stdout': ff_stdout,
         'monitor_ff_stderr': ff_stderr,
+        'tif_sorted_file_numbers': tif_sorted_file_numbers,
+        'tif_sorted_filenames': tif_sorted_filenames,
         }
     
 

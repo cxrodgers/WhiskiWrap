@@ -39,9 +39,6 @@ SENSITIVE_PARAMETERS_FILE = os.path.join(DIRECTORY, 'sensitive.parameters')
 HALFSPACE_DB_FILE = os.path.join(DIRECTORY, 'halfspace.detectorbank')
 LINE_DB_FILE = os.path.join(DIRECTORY, 'line.detectorbank')
 
-# libpfDoubleRate library, needed for PFReader
-LIB_DOUBLERATE = os.path.join(DIRECTORY, 'libpfDoubleRate.so')
-
 def copy_parameters_files(target_directory, sensitive=False):
     """Copies in parameters and banks"""
     if sensitive:
@@ -618,17 +615,17 @@ class PFReader:
         self.verbose = verbose
 
         ## Load the libraries
-        # boost_thread needs boost_system
-        # I think it used to be able to find boost_system without this line
-        libboost_system = ctypes.cdll.LoadLibrary(
-            '/usr/local/lib/libboost_system.so.1.50.0')
-        
-        # Load boost_thread
-        libboost_thread = ctypes.cdll.LoadLibrary(
-            '/usr/local/lib/libboost_thread.so')
+        # Need to load in this order
+        ctypes.cdll.LoadLibrary(os.path.expanduser(
+            '~/dev/boost_1_50_0/stage/lib/libboost_system.so'))
+        ctypes.cdll.LoadLibrary(os.path.expanduser(
+            '~/dev/boost_1_50_0/stage/lib/libboost_chrono.so'))
+        ctypes.cdll.LoadLibrary(os.path.expanduser(
+            '~/dev/boost_1_50_0/stage/lib/libboost_thread.so'))        
         
         # Load the pf_lib (which requires boost_thread)
-        self.pf_lib = ctypes.cdll.LoadLibrary(LIB_DOUBLERATE)
+        self.pf_lib = ctypes.cdll.LoadLibrary(os.path.expanduser(
+            '~/dev/PFInstaller/PFRemote/bin/libpfDoubleRate.so'))
         self.demod_func = self.pf_lib['pfDoubleRate_DeModulateImage']
 
         # Set the number of threads

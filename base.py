@@ -24,6 +24,7 @@ except ImportError:
     print "cannot import whisk"
 import pandas
 import WhiskiWrap
+from WhiskiWrap import video_utils
 import my
 import scipy.io
 import ctypes
@@ -244,7 +245,7 @@ def pipeline_trace(input_vfile, h5_filename,
         # read everything
         # need to be able to crop here
         print "Reading"
-        frames = WhiskiWrap.video_utils.process_chunks_of_video(input_vfile, 
+        frames = video_utils.process_chunks_of_video(input_vfile, 
             frame_start=start_epoch, frame_stop=stop_epoch,
             frames_per_chunk=chunk_sz_frames, # only necessary for chunk_func
             frame_func=None, chunk_func=None,

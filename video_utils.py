@@ -9,6 +9,7 @@ import subprocess
 import pandas
 import re
 import datetime
+from my.video import get_video_params
 
 def process_chunks_of_video(filename, 
     frame_start=None, frame_stop=None, n_frames=None, frame_rate=None,

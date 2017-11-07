@@ -601,6 +601,103 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
         'tif_sorted_file_numbers': tif_sorted_file_numbers,
         'tif_sorted_filenames': tif_sorted_filenames,
         }
+
+def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
+    timestamps_filename=None, monitor_video=None, monitor_video_kwargs=None, 
+    write_monitor_ffmpeg_stderr_to_screen=False, frame_func=None, verbose=True,
+    ):
+    """Read modulated data and compress to video
+    
+    Adapted from interleaved_reading_and_tracing
+    
+    input_reader : typically a PFReader
+    chunk_size : frames per chunk
+    stop_after_frame : break early, for debugging
+    timestamps_filename : Where to store the timestamps
+        Only valid for PFReader input_reader
+    monitor_video : filename for a monitor video
+        If None, no monitor video will be written
+    monitor_video_kwargs : kwargs to pass to FFmpegWriter for monitor
+    write_monitor_ffmpeg_stderr_to_screen : whether to display
+        output from ffmpeg writing instance
+    frame_func : function to apply to each frame
+        If 'invert', will apply 255 - frame
+    verbose : verbose
+    
+    Returns: dict
+        monitor_ff_stderr, monitor_ff_stdout : results from monitor
+            video ffmpeg instance
+    """
+    ## Set up kwargs
+    if monitor_video_kwargs is None:
+        monitor_video_kwargs = {}
+    
+    if frame_func == 'invert':
+        frame_func = lambda frame: 255 - frame
+    
+    ## Initialize readers and writers
+    if verbose:
+        print "initalizing readers and writers"
+
+    # FFmpeg writer is initalized after first frame
+    ffw = None
+
+    ## Iterate over chunks
+    out_of_frames = False
+    nframe = 0
+    nframes_written = 0
+    
+    # Init the iterator outside of the loop so that it persists
+    iter_obj = input_reader.iter_frames()
+    
+    while not out_of_frames:
+        # Get a chunk of frames
+        if verbose:
+            print "loading chunk of frames starting with ", nframe
+        chunk_of_frames = []
+        for frame in iter_obj:
+            if frame_func is not None:
+                frame = frame_func(frame)
+            chunk_of_frames.append(frame)
+            nframe = nframe + 1
+            if stop_after_frame is not None and nframe >= stop_after_frame:
+                break
+            if len(chunk_of_frames) == chunk_size:
+                break
+    
+        # Check if we ran out
+        if len(chunk_of_frames) != chunk_size:
+            out_of_frames = True
+    
+        ## Start monitor encode
+        # This is also synchronous, otherwise the input buffer might fill up
+        if monitor_video is not None:        
+            if ffw is None:
+                ffw = WhiskiWrap.FFmpegWriter(monitor_video, 
+                    frame_width=frame.shape[1], frame_height=frame.shape[0],
+                    write_stderr_to_screen=write_monitor_ffmpeg_stderr_to_screen,
+                    **monitor_video_kwargs)
+            for frame in chunk_of_frames:
+                ffw.write(frame)    
+                nframes_written = nframes_written + 1
+    
+    # Finalize writers
+    if ffw is not None:
+        ff_stdout, ff_stderr = ffw.close()
+    else:
+        ff_stdout, ff_stderr = None, None
+
+    # Also write timestamps as numpy file
+    if hasattr(input_reader, 'timestamps') and timestamps_filename is not None:
+        timestamps = np.concatenate(input_reader.timestamps)
+        assert len(timestamps) == nframes_written
+        assert nframes_written == nframe
+        np.save(timestamps_filename, timestamps)
+
+    return {
+        'monitor_ff_stdout': ff_stdout,
+        'monitor_ff_stderr': ff_stderr,
+    }
     
 
 class PFReader:

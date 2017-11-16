@@ -20,6 +20,7 @@ import multiprocessing
 import tables
 try:
     from whisk.python import trace
+    from whisk.python.traj import MeasurementsTable
 except ImportError:
     print "cannot import whisk"
 import pandas
@@ -66,6 +67,10 @@ class WhiskerSeg(tables.IsDescription):
     fol_x = tables.Float32Col()
     fol_y = tables.Float32Col()
     pixlen = tables.UInt16Col()
+    length = tables.Float32Col()
+    score = tables.Float32Col()
+    angle = tables.Float32Col()
+    curvature = tables.Float32Col()
     chunk_start = tables.UInt32Col()
 
 def write_chunk(chunk, chunkname, directory='.'):
@@ -183,7 +188,7 @@ def setup_hdf5(h5_filename, expectedrows):
     
     h5file.close()
     
-def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
+def append_whiskers_to_hdf5(whisk_filename, measurements_filename, h5_filename, chunk_start):
     """Load data from whisk_file and put it into an hdf5 file
     
     The HDF5 file will have two basic components:
@@ -204,6 +209,9 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
     #wv, nwhisk = trace.Debug_Load_Whiskers(whisk_filename)
     whiskers = trace.Load_Whiskers(whisk_filename)
     nwhisk = np.sum(map(len, whiskers.values()))
+    M = MeasurementsTable(str(measurements_filename))
+    measurements = M.get_shape_table()
+    measurements_idx = 0
 
     # Open file
     h5file = tables.open_file(h5_filename, mode="a")
@@ -223,6 +231,10 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
             h5seg['fol_y'] = wseg.y[0]
             h5seg['tip_x'] = wseg.x[-1]
             h5seg['tip_y'] = wseg.y[-1]
+            h5seg['length'] = measurements[measurements_idx][0]
+            h5seg['score'] = measurements[measurements_idx][1]
+            h5seg['angle'] = measurements[measurements_idx][2]
+            h5seg['curvature'] = measurements[measurements_idx][3]
             h5seg['pixlen'] = len(wseg.x)
             assert len(wseg.x) == len(wseg.y)
             h5seg.append()
@@ -230,6 +242,8 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
             # Write x
             xpixels_vlarray.append(wseg.x)
             ypixels_vlarray.append(wseg.y)
+    
+            measurements_idx += 1
 
     table.flush()
     h5file.close()    
@@ -332,6 +346,7 @@ def pipeline_trace(input_vfile, h5_filename,
                 os.path.join(input_dir, chunk_name))
             append_whiskers_to_hdf5(
                 whisk_filename=fn.whiskers,
+                measurements_filename=fn.measurements,
                 h5_filename=h5_filename, 
                 chunk_start=chunk_start)
 

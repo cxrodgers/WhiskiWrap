@@ -104,7 +104,7 @@ def trace_chunk(video_filename, delete_when_done=False):
     print "Done", video_filename
     
     if not os.path.exists(whiskers_file):
-        print raw_filename
+        print raw_video_filename
         raise IOError("tracing seems to have failed")
 
     if delete_when_done:
@@ -112,6 +112,46 @@ def trace_chunk(video_filename, delete_when_done=False):
     
     return {'video_filename': video_filename, 'stdout': stdout, 'stderr': stderr}
 
+def measure_chunk(whiskers_filename, delete_when_done=False):
+    """Run measure on an input file
+    
+    First we create a measurement filename from `whiskers_filename`, which is
+    the same file with '.measurements' replacing the extension. Then we run
+    trace using subprocess.
+    
+    Care is taken to move into the working directory during trace, and then
+    back to the original directory.
+    
+    Returns:
+        stdout, stderr
+    """
+    print "Starting", whiskers_filename
+    orig_dir = os.getcwd()
+    run_dir, raw_whiskers_filename = os.path.split(os.path.abspath(whiskers_filename))
+    measurements_file = WhiskiWrap.utils.FileNamer.from_video(whiskers_filename).measurements
+    command = ['measure', '--face', 'right', raw_whiskers_filename, measurements_file]
+
+    os.chdir(run_dir)
+    try:
+        pipe = subprocess.Popen(command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            )
+        stdout, stderr = pipe.communicate()  
+    except:
+        raise
+    finally:
+        os.chdir(orig_dir)
+    print "Done", whiskers_filename
+    
+    if not os.path.exists(measurements_file):
+        print raw_whiskers_filename
+        raise IOError("measurement seems to have failed")
+
+    if delete_when_done:
+        os.remove(whiskers_filename)
+    
+    return {'whiskers_filename': whiskers_filename, 'stdout': stdout, 'stderr': stderr}
 
 def sham_trace_chunk(video_filename):
     print "sham tracing", video_filename
@@ -241,7 +281,9 @@ def pipeline_trace(input_vfile, h5_filename,
         # Chunks
         chunk_starts = np.arange(start_epoch, stop_epoch, chunk_sz_frames)
         chunk_names = ['chunk%08d.tif' % nframe for nframe in chunk_starts]
-    
+        whisk_names = ['chunk%08d.whiskers' % nframe for nframe in chunk_starts]
+        
+
         # read everything
         # need to be able to crop here
         print "Reading"
@@ -272,6 +314,15 @@ def pipeline_trace(input_vfile, h5_filename,
             [os.path.join(input_dir, chunk_name)
                 for chunk_name in chunk_names])
         pool.close()
+
+        # take measurements:
+        print "Measuring"
+        pool = multiprocessing.Pool(n_trace_processes)
+        meas_res = pool.map(measure_chunk, 
+            [os.path.join(input_dir, whisk_name)
+                for whisk_name in whisk_names])
+        pool.close()
+        
 
         # stitch
         print "Stitching"

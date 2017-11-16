@@ -133,7 +133,7 @@ def measure_chunk(whiskers_filename, delete_when_done=False):
     print "Starting", whiskers_filename
     orig_dir = os.getcwd()
     run_dir, raw_whiskers_filename = os.path.split(os.path.abspath(whiskers_filename))
-    measurements_file = WhiskiWrap.utils.FileNamer.from_video(whiskers_filename).measurements
+    measurements_file = WhiskiWrap.utils.FileNamer.from_whiskers(whiskers_filename).measurements
     command = ['measure', '--face', 'right', raw_whiskers_filename, measurements_file]
 
     os.chdir(run_dir)
@@ -207,6 +207,9 @@ def append_whiskers_to_hdf5(whisk_filename, measurements_filename, h5_filename, 
     # The python object responds to .time and .id (integers) and .x and .y (numpy
     # float arrays).
     #wv, nwhisk = trace.Debug_Load_Whiskers(whisk_filename)
+    print whisk_filename
+    print measurements_filename
+    
     whiskers = trace.Load_Whiskers(whisk_filename)
     nwhisk = np.sum(map(len, whiskers.values()))
     M = MeasurementsTable(str(measurements_filename))

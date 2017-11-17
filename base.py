@@ -32,6 +32,7 @@ import ctypes
 import glob
 import time
 import shutil
+import itertools
 
 # Find the repo directory and the default param files
 # The banks don't differe with sensitive or default
@@ -117,7 +118,7 @@ def trace_chunk(video_filename, delete_when_done=False):
     
     return {'video_filename': video_filename, 'stdout': stdout, 'stderr': stderr}
 
-def measure_chunk(whiskers_filename, delete_when_done=False):
+def measure_chunk(whiskers_filename, face, delete_when_done=False):
     """Run measure on an input file
     
     First we create a measurement filename from `whiskers_filename`, which is
@@ -134,7 +135,7 @@ def measure_chunk(whiskers_filename, delete_when_done=False):
     orig_dir = os.getcwd()
     run_dir, raw_whiskers_filename = os.path.split(os.path.abspath(whiskers_filename))
     measurements_file = WhiskiWrap.utils.FileNamer.from_whiskers(whiskers_filename).measurements
-    command = ['measure', '--face', 'right', raw_whiskers_filename, measurements_file]
+    command = ['measure', '--face', face, raw_whiskers_filename, measurements_file]
 
     os.chdir(run_dir)
     try:
@@ -255,7 +256,7 @@ def pipeline_trace(input_vfile, h5_filename,
     epoch_sz_frames=3200, chunk_sz_frames=200, 
     frame_start=0, frame_stop=None,
     n_trace_processes=4, expectedrows=1000000, flush_interval=100000,
-    ):
+    face='right'):
     """Trace a video file using a chunked strategy.
     
     input_vfile : input video filename
@@ -335,9 +336,9 @@ def pipeline_trace(input_vfile, h5_filename,
         # take measurements:
         print "Measuring"
         pool = multiprocessing.Pool(n_trace_processes)
-        meas_res = pool.map(measure_chunk, 
-            [os.path.join(input_dir, whisk_name)
-                for whisk_name in whisk_names])
+        meas_res = pool.map(measure_chunk_star, 
+            itertools.izip([os.path.join(input_dir, whisk_name)
+                for whisk_name in whisk_names],itertools.repeat(face)))
         pool.close()
         
 
@@ -1163,3 +1164,7 @@ class FFmpegWriter:
     def close(self):
         """Closes the ffmpeg process and returns stdout, stderr"""
         return self.ffmpeg_proc.communicate()
+
+
+def measure_chunk_star(args):
+    return measure_chunk(*args)

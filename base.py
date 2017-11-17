@@ -182,7 +182,7 @@ def setup_hdf5(h5_filename, expectedrows, measure=False):
 
     if not measure:
         WhiskerDescription = WhiskerSeg
-    elif measure
+    elif measure:
         WhiskerDescription = WhiskerSeg_measure
     
     # A group for the normal data
@@ -298,7 +298,7 @@ def pipeline_trace(input_vfile, h5_filename,
     input_dir = os.path.split(input_vfile)[0]    
 
     # Setup the result file
-    setup_hdf5(h5_filename, expectedrows)
+    setup_hdf5(h5_filename, expectedrows, measure=measure)
 
     # Figure out how many frames and epochs
     duration = my.video.get_video_duration2(input_vfile)

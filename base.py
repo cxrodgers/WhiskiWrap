@@ -20,16 +20,19 @@ import multiprocessing
 import tables
 try:
     from whisk.python import trace
+    from whisk.python.traj import MeasurementsTable
 except ImportError:
     print "cannot import whisk"
 import pandas
 import WhiskiWrap
+from WhiskiWrap import video_utils
 import my
 import scipy.io
 import ctypes
 import glob
 import time
 import shutil
+import itertools
 
 # Find the repo directory and the default param files
 # The banks don't differe with sensitive or default
@@ -67,6 +70,21 @@ class WhiskerSeg(tables.IsDescription):
     pixlen = tables.UInt16Col()
     chunk_start = tables.UInt32Col()
 
+class WhiskerSeg_measure(tables.IsDescription):
+    time = tables.UInt32Col()
+    id = tables.UInt16Col()
+    tip_x = tables.Float32Col()
+    tip_y = tables.Float32Col()
+    fol_x = tables.Float32Col()
+    fol_y = tables.Float32Col()
+    pixlen = tables.UInt16Col()
+    length = tables.Float32Col()
+    score = tables.Float32Col()
+    angle = tables.Float32Col()
+    curvature = tables.Float32Col()
+    chunk_start = tables.UInt32Col()
+
+
 def write_chunk(chunk, chunkname, directory='.'):
     tifffile.imsave(os.path.join(directory, chunkname), chunk, compress=0)
 
@@ -103,7 +121,7 @@ def trace_chunk(video_filename, delete_when_done=False):
     print "Done", video_filename
     
     if not os.path.exists(whiskers_file):
-        print raw_filename
+        print raw_video_filename
         raise IOError("tracing seems to have failed")
 
     if delete_when_done:
@@ -111,20 +129,64 @@ def trace_chunk(video_filename, delete_when_done=False):
     
     return {'video_filename': video_filename, 'stdout': stdout, 'stderr': stderr}
 
+def measure_chunk(whiskers_filename, face, delete_when_done=False):
+    """Run measure on an input file
+    
+    First we create a measurement filename from `whiskers_filename`, which is
+    the same file with '.measurements' replacing the extension. Then we run
+    trace using subprocess.
+    
+    Care is taken to move into the working directory during trace, and then
+    back to the original directory.
+    
+    Returns:
+        stdout, stderr
+    """
+    print "Starting", whiskers_filename
+    orig_dir = os.getcwd()
+    run_dir, raw_whiskers_filename = os.path.split(os.path.abspath(whiskers_filename))
+    measurements_file = WhiskiWrap.utils.FileNamer.from_whiskers(whiskers_filename).measurements
+    command = ['measure', '--face', face, raw_whiskers_filename, measurements_file]
+
+    os.chdir(run_dir)
+    try:
+        pipe = subprocess.Popen(command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            )
+        stdout, stderr = pipe.communicate()  
+    except:
+        raise
+    finally:
+        os.chdir(orig_dir)
+    print "Done", whiskers_filename
+    
+    if not os.path.exists(measurements_file):
+        print raw_whiskers_filename
+        raise IOError("measurement seems to have failed")
+
+    if delete_when_done:
+        os.remove(whiskers_filename)
+    
+    return {'whiskers_filename': whiskers_filename, 'stdout': stdout, 'stderr': stderr}
 
 def sham_trace_chunk(video_filename):
     print "sham tracing", video_filename
     time.sleep(2)
     return video_filename
 
-def setup_hdf5(h5_filename, expectedrows):
+def setup_hdf5(h5_filename, expectedrows, measure=False):
 
     # Open file
     h5file = tables.open_file(h5_filename, mode="w")    
-    
+
+    if not measure:
+        WhiskerDescription = WhiskerSeg
+    elif measure:
+        WhiskerDescription = WhiskerSeg_measure
     
     # A group for the normal data
-    table = h5file.create_table(h5file.root, "summary", WhiskerSeg, 
+    table = h5file.create_table(h5file.root, "summary", WhiskerDescription, 
         "Summary data about each whisker segment",
         expectedrows=expectedrows)
 
@@ -142,7 +204,7 @@ def setup_hdf5(h5_filename, expectedrows):
     
     h5file.close()
     
-def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
+def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start, measurements_filename=None):
     """Load data from whisk_file and put it into an hdf5 file
     
     The HDF5 file will have two basic components:
@@ -161,8 +223,16 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
     # The python object responds to .time and .id (integers) and .x and .y (numpy
     # float arrays).
     #wv, nwhisk = trace.Debug_Load_Whiskers(whisk_filename)
+    print whisk_filename
+    
     whiskers = trace.Load_Whiskers(whisk_filename)
     nwhisk = np.sum(map(len, whiskers.values()))
+
+    if measurements_filename is not None:
+        print measurements_filename
+        M = MeasurementsTable(str(measurements_filename))
+        measurements = M.get_shape_table()
+        measurements_idx = 0
 
     # Open file
     h5file = tables.open_file(h5_filename, mode="a")
@@ -182,13 +252,22 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start):
             h5seg['fol_y'] = wseg.y[0]
             h5seg['tip_x'] = wseg.x[-1]
             h5seg['tip_y'] = wseg.y[-1]
-            h5seg['pixlen'] = len(wseg.x)
+
+            if measurements_filename is not None:
+                h5seg['length'] = measurements[measurements_idx][0]
+                h5seg['score'] = measurements[measurements_idx][1]
+                h5seg['angle'] = measurements[measurements_idx][2]
+                h5seg['curvature'] = measurements[measurements_idx][3]
+                h5seg['pixlen'] = len(wseg.x)
+                measurements_idx += 1
+           
             assert len(wseg.x) == len(wseg.y)
             h5seg.append()
             
             # Write x
             xpixels_vlarray.append(wseg.x)
             ypixels_vlarray.append(wseg.y)
+    
 
     table.flush()
     h5file.close()    
@@ -197,7 +276,7 @@ def pipeline_trace(input_vfile, h5_filename,
     epoch_sz_frames=3200, chunk_sz_frames=200, 
     frame_start=0, frame_stop=None,
     n_trace_processes=4, expectedrows=1000000, flush_interval=100000,
-    ):
+    measure=False,face='right'):
     """Trace a video file using a chunked strategy.
     
     input_vfile : input video filename
@@ -219,7 +298,7 @@ def pipeline_trace(input_vfile, h5_filename,
     input_dir = os.path.split(input_vfile)[0]    
 
     # Setup the result file
-    setup_hdf5(h5_filename, expectedrows)
+    setup_hdf5(h5_filename, expectedrows, measure=measure)
 
     # Figure out how many frames and epochs
     duration = my.video.get_video_duration2(input_vfile)
@@ -240,11 +319,13 @@ def pipeline_trace(input_vfile, h5_filename,
         # Chunks
         chunk_starts = np.arange(start_epoch, stop_epoch, chunk_sz_frames)
         chunk_names = ['chunk%08d.tif' % nframe for nframe in chunk_starts]
-    
+        whisk_names = ['chunk%08d.whiskers' % nframe for nframe in chunk_starts]
+        
+
         # read everything
         # need to be able to crop here
         print "Reading"
-        frames = WhiskiWrap.video_utils.process_chunks_of_video(input_vfile, 
+        frames = video_utils.process_chunks_of_video(input_vfile, 
             frame_start=start_epoch, frame_stop=stop_epoch,
             frames_per_chunk=chunk_sz_frames, # only necessary for chunk_func
             frame_func=None, chunk_func=None,
@@ -272,16 +353,35 @@ def pipeline_trace(input_vfile, h5_filename,
                 for chunk_name in chunk_names])
         pool.close()
 
+        # take measurements:
+        if measure:
+            print "Measuring"
+            pool = multiprocessing.Pool(n_trace_processes)
+            meas_res = pool.map(measure_chunk_star, 
+                itertools.izip([os.path.join(input_dir, whisk_name)
+                    for whisk_name in whisk_names],itertools.repeat(face)))
+            pool.close()
+        
+
         # stitch
         print "Stitching"
         for chunk_start, chunk_name in zip(chunk_starts, chunk_names):
             # Append each chunk to the hdf5 file
             fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(
                 os.path.join(input_dir, chunk_name))
-            append_whiskers_to_hdf5(
-                whisk_filename=fn.whiskers,
-                h5_filename=h5_filename, 
-                chunk_start=chunk_start)
+            
+            if not measure:
+                append_whiskers_to_hdf5(
+                    whisk_filename=fn.whiskers,
+                    h5_filename=h5_filename, 
+                    chunk_start=chunk_start)
+            elif measure:
+                append_whiskers_to_hdf5(
+                    whisk_filename=fn.whiskers,
+                    measurements_filename=fn.measurements,
+                    h5_filename=h5_filename, 
+                    chunk_start=chunk_start)
+
 
 
 def write_video_as_chunked_tiffs(input_reader, tiffs_to_trace_directory,
@@ -1093,3 +1193,7 @@ class FFmpegWriter:
     def close(self):
         """Closes the ffmpeg process and returns stdout, stderr"""
         return self.ffmpeg_proc.communicate()
+
+
+def measure_chunk_star(args):
+    return measure_chunk(*args)

@@ -718,6 +718,8 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
     monitor_video : filename for a monitor video
         If None, no monitor video will be written
     monitor_video_kwargs : kwargs to pass to FFmpegWriter for monitor
+        If None, the default is {'qp': 15} for a high-fidelity compression
+        that is still ~6x smaller than lossless.
     write_monitor_ffmpeg_stderr_to_screen : whether to display
         output from ffmpeg writing instance
     frame_func : function to apply to each frame
@@ -730,7 +732,7 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
     """
     ## Set up kwargs
     if monitor_video_kwargs is None:
-        monitor_video_kwargs = {}
+        monitor_video_kwargs = {'qp': 15}
     
     if frame_func == 'invert':
         frame_func = lambda frame: 255 - frame

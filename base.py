@@ -1,12 +1,14 @@
 """Main functions for running input videos through trace.
 
-The overall algorithm is contained in 'pipeline_trace'. Briefly, the input
-video is first broken into large epochs, each of which should be small enough
-to fit in available memory. Each epoch is then broken into many non-overlapping
-chunks. Each chunk is written to disk as a tiff stack, and parallel
-instances of 'trace' are called on each chunk. Finally, the results from
-each chunk are loaded and combined into a single large HDF5 file for the
-entire video.
+The overall algorithm is contained in `interleaved_reading_and_tracing`. 
+* The input can be a video file or a directory of PF files.
+* Chunks of ~200 frames are read using ffmpeg, and then written to disk
+  as uncompressed tiff stacks.
+* Trace is called in parallel on each tiff stack
+* Additional chunks are read as trace completes.
+* At the end, all of the HDF5 files are stitched together.
+
+The previous function `pipeline_trace` is now deprecated.
 """
 
 try:
@@ -278,6 +280,10 @@ def pipeline_trace(input_vfile, h5_filename,
     n_trace_processes=4, expectedrows=1000000, flush_interval=100000,
     measure=False,face='right'):
     """Trace a video file using a chunked strategy.
+    
+    This is now deprecated in favor of interleaved_reading_and_tracing.
+    The issue with this function is that it has to write out all of the tiffs
+    first, before tracing, which is a wasteful use of disk space.
     
     input_vfile : input video filename
     h5_filename : output HDF5 file

@@ -1205,3 +1205,11 @@ class FFmpegWriter:
 
 def measure_chunk_star(args):
     return measure_chunk(*args)
+
+
+def read_whiskers_hdf5_summary(filename):
+    """Reads and returns the `summary` table in an HDF5 file"""
+    with tables.open_file(filename) as fi:
+        summary = pandas.DataFrame.from_records(fi.root.summary.read())
+    
+    return summary

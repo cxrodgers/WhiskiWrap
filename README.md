@@ -53,6 +53,10 @@ The following parameters must be chosen:
 * `epoch_size` - the number of frames per epoch. It is most efficient to make this value as large as possible. However, it should not be so large that you run out of memory when reading in the entire epoch of video. 100000 is a reasonable choice.
 * `chunk_size` - the size of each chunk. Ideally, this should be `epoch_size` / `n_trace_processes`, so that all the processes complete at about the same time. It could also be `epoch_size` / (N * `n_trace_processes`) where N is an integer.
 
+You may also add parameters to run the measure command
+* `measure=True` - run measure command
+* `face='right'` - run measure with face on right side, can also specify to 'left' side
+
 # Installation
 WhiskiWrap is written in Python and relies on `ffmpeg` for reading input videos, `tifffile` for writing tiff stacks, `whiski` for tracing whiskers in the tiff stacks, and `pytables` for creating HDF5 files with all of the results.
 

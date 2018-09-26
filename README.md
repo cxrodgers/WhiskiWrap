@@ -65,13 +65,13 @@ Next install [`whiski`](http://whiskertracking.janelia.org). There are several w
 1. Download the pre-built binary. This is the easiest path because it doesn't require compiling anything. However, you still need to make a few changes to the Python code that is downloaded in order to make it work with `WhiskiWrap`.
 2. Build `whiski` from source, using my lightly customized fork. This will probably require more trouble-shooting to make sure all of its parts are working.
 
-To use the pre-built binary:
+To use the pre-built binary (preferred):
 
-1. Download the [zipped binary](http://whiskertracking.janelia.org/wiki/display/MyersLab/Whisker+Tracking+Downloads) and unpack it. Rename the unpacked directory to `~/dev/whisk`
+1. Download the [zipped binary](http://whiskertracking.janelia.org/wiki/display/MyersLab/Whisker+Tracking+Downloads) and unpack it or get the file whisk-1.1.0d-64bit-Linux.tar.gz from someone. Unpack with `tar -xzf whisk-1.1.0d-64bit-Linux.tar.gz`. Rename the unpacked directory to `~/dev/whisk`
 2. Add the binaries to your system path so that you can run `trace` from the command line.
 3. Add a few files to make `whiski`'s Python code work more nicely with other packages. (Technically, we need to make it a module, and avoid name collisions with the unrelated built-in module `trace`.)
-4. `touch ~/whisk/share/whisk/__init__.py`
-5. `touch ~/whisk/share/whisk/python/__init__.py`
+4. `touch ~/dev/whisk/share/whisk/__init__.py`
+5. `touch ~/dev/whisk/share/whisk/python/__init__.py`
 6. Add these modules to your Python path.
 7. `ln -s ~/dev/whisk/share/whisk/python ~/dev/whisk/python`
 8. or `echo "~/whisk/share" >> "~/.local/lib/python2.7/site-packages/whiski_wrap.pth`
@@ -93,6 +93,15 @@ To build from source:
 
 ## Installing Python modules
 Here I outline the use of `conda` to manage and install Python modules. In the long run this is the easiest way. Unfortunately it doesn't work well with user-level `pip`. Specifically, you should not have anything on your `$PYTHONPATH`, and there shouldn't be any installed modules in your `~/.local`.
+
+0. Clone my into ~/dev for video processing functions.
+```
+cd ~/dev
+git clone https://github.com/cxrodgers/my.git
+```
+
+0.5. Install scipy.
+`conda install scipy`
 
 1. Create a new conda environment for WhiskiWrap.
 

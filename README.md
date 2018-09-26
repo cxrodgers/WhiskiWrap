@@ -8,6 +8,7 @@ My goal is to improve whiski in the following ways:
 3. Make it more cross-platform and memory-efficient, by converting whiski's output files into HDF5 files which can be read by multiple programs (Python, Matlab) on any operating system. Importantly, HDF5 files can also be read partially to avoid overflowing your system's memory.
 
 ## Example
+Note: this example is outdated. The current pipeline command is `interleaved_reading_and_trace`.
 First start the interactive python environment by typing ipython at the terminal.
 
 Import WhiskiWrap so it can be used:

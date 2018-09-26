@@ -96,7 +96,7 @@ Here I outline the use of `conda` to manage and install Python modules. In the l
 
 1. Create a new conda environment for WhiskiWrap.
 
-`conda create -n whiski_wrap python=2.7 pip numpy matplotlib pyqt tables pandas ipython`
+`conda create -n whiski_wrap python=2.7 pip numpy matplotlib pyqt pytables pandas ipython`
 2. Activate that environment and install `tifffile`
 ```
 source activate whiski_wrap

@@ -113,7 +113,7 @@ git clone https://github.com/cxrodgers/my.git
 `conda create -n whiski_wrap python=2.7 pip numpy matplotlib pyqt pytables pandas ipython`
 2. Activate that environment and install `tifffile`
 ```
-conda activate whiski_wrap
+source activate whiski_wrap
 pip install tifffile
 ```
 3. Clone WhiskiWrap

@@ -8,7 +8,8 @@ My goal is to improve whiski in the following ways:
 3. Make it more cross-platform and memory-efficient, by converting whiski's output files into HDF5 files which can be read by multiple programs (Python, Matlab) on any operating system. Importantly, HDF5 files can also be read partially to avoid overflowing your system's memory.
 
 ## Example
-Note: this example is outdated. The current pipeline command is `interleaved_reading_and_trace`.
+Note: The current best pipeline for running trace is `interleaved_reading_and_trace`, but the command `pipeline_trace` is the only one configured to run measure.
+
 First start the interactive python environment by typing ipython at the terminal.
 
 Import WhiskiWrap so it can be used:
@@ -51,11 +52,11 @@ This just reads the "summary": the tip and follicle of every whisker in every fr
 
 The following parameters must be chosen:
 * `n_trace_processes` - the number of parallel instances of `trace` to run at the same time. The most efficient choice is the number of CPUs on your system.
-* `epoch_size` - the number of frames per epoch. It is most efficient to make this value as large as possible. However, it should not be so large that you run out of memory when reading in the entire epoch of video. 100000 is a reasonable choice.
-* `chunk_size` - the size of each chunk. Ideally, this should be `epoch_size` / `n_trace_processes`, so that all the processes complete at about the same time. It could also be `epoch_size` / (N * `n_trace_processes`) where N is an integer.
+* `epoch_sz_frames` - the number of frames per epoch. It is most efficient to make this value as large as possible. However, it should not be so large that you run out of memory when reading in the entire epoch of video. 100000 is a reasonable choice.
+* `chunk_sz_frames` - the size of each chunk. Ideally, this should be `epoch_size` / `n_trace_processes`, so that all the processes complete at about the same time. It could also be `epoch_size` / (N * `n_trace_processes`) where N is an integer.
 
-You may also add parameters to run the measure command
-* `measure=True` - run measure command
+You may also add optional parameters to run the measure command
+* `measure=True` - run measure command, default is False
 * `face='right'` - run measure with face on right side, can also specify to 'left' side
 
 # Installation

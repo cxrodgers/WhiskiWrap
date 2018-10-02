@@ -117,6 +117,8 @@ git clone https://github.com/cxrodgers/my.git
 source activate whiski_wrap
 pip install tifffile
 ```
+If `source activate whiski_wrap` doesn't work, try `conda activate whiski_wrap`
+
 3. Clone WhiskiWrap
 ```
 cd ~/dev

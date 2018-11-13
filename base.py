@@ -1023,7 +1023,7 @@ class FFmpegReader:
     """Reads frames from a video file using ffmpeg process"""
     def __init__(self, input_filename, pix_fmt='gray', bufsize=10**9,
         duration=None, start_frame_time=None, start_frame_number=None,
-        write_stderr_to_screen=False):
+        write_stderr_to_screen=False, vsync='drop'):
         """Initialize a new reader
         
         input_filename : name of file
@@ -1064,6 +1064,7 @@ class FFmpegReader:
         
         command += [
             '-i', input_filename,
+            '-vsync', vsync,
             '-f', 'image2pipe',
             '-pix_fmt', pix_fmt]
         

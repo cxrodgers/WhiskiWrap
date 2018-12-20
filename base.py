@@ -815,7 +815,8 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
 
 class PFReader:
     """Reads photonfocus modulated data stored in matlab files"""
-    def __init__(self, input_directory, n_threads=4, verbose=True):
+    def __init__(self, input_directory, n_threads=4, verbose=True, 
+        error_on_unsorted_filetimes=True):
         """Initialize a new reader.
         
         input_directory : where the mat files are
@@ -823,6 +824,12 @@ class PFReader:
             They should contain variables called 'img' (a 4d array of
             modulated frames) and 't' (timestamps of each frame).
         n_threads : sent to pfDoubleRate_SetNrOfThreads
+        
+        error_on_unsorted_filetimes : bool
+            Whether to raise an error if the modification times of the 
+            matfiles are not in sorted order, which typically happens if
+            something has gone wrong (but could just be that the file times
+            weren't preserved)
         """
         self.input_directory = input_directory
         self.verbose = verbose
@@ -858,6 +865,16 @@ class PFReader:
             self.matfile_ordering]
         self.sorted_matfile_numbers = np.array(self.matfile_numbers)[
             self.matfile_ordering]
+
+        # Error check the file times
+        filetimes = np.array([
+            my.misc.get_file_time(filename)
+            for filename in self.sorted_matfile_names])
+        if (np.diff(filetimes) < 0).any():
+            if error_on_unsorted_filetimes:
+                raise IOError("unsorted matfiles")
+            else:
+                print "warning: unsorted matfiles"
         
         # Create variable to store timestamps
         self.timestamps = []

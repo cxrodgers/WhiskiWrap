@@ -617,7 +617,7 @@ def interleaved_read_trace_and_measure(input_reader, tiffs_to_trace_directory,
 
     # Setup the result file
     if not skip_stitch:
-        setup_hdf5(h5_filename, expectedrows)
+        setup_hdf5(h5_filename, expectedrows, measure=True)
     
     # Copy the parameters files
     copy_parameters_files(tiffs_to_trace_directory, sensitive=sensitive)
@@ -746,6 +746,7 @@ def interleaved_read_trace_and_measure(input_reader, tiffs_to_trace_directory,
             fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(chunk_name)
             append_whiskers_to_hdf5(
                 whisk_filename=fn.whiskers,
+		measurements_filename = fn.measurements,
                 h5_filename=h5_filename, 
                 chunk_start=chunk_start)
 

@@ -298,7 +298,7 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start, measuremen
     if measurements_filename is not None:
         print measurements_filename
         M = MeasurementsTable(str(measurements_filename))
-        measurements = M.get_shape_table()
+        measurements = M.as_array()
         measurements_idx = 0
 
     # Open file
@@ -321,11 +321,17 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start, measuremen
             h5seg['tip_y'] = wseg.y[-1]
 
             if measurements_filename is not None:
-                h5seg['length'] = measurements[measurements_idx][0]
-                h5seg['score'] = measurements[measurements_idx][1]
-                h5seg['angle'] = measurements[measurements_idx][2]
-                h5seg['curvature'] = measurements[measurements_idx][3]
+                h5seg['length'] = measurements[measurements_idx][3]
+                h5seg['score'] = measurements[measurements_idx][4]
+                h5seg['angle'] = measurements[measurements_idx][5]
+                h5seg['curvature'] = measurements[measurements_idx][6]
                 h5seg['pixlen'] = len(wseg.x)
+		h5seg['fol_x'] = measurements[measurements_idx][7] 
+		h5seg['fol_y'] = measurements[measurements_idx][8]
+		h5seg['tip_x'] = measurements[measurements_idx][9]
+		h5seg['tip_y'] = measurements[measurements_idx][10]
+
+
                 measurements_idx += 1
            
             assert len(wseg.x) == len(wseg.y)

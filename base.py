@@ -298,7 +298,7 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start, measuremen
     if measurements_filename is not None:
         print measurements_filename
         M = MeasurementsTable(str(measurements_filename))
-        measurements = M.as_array()
+        measurements = M.asarray()
         measurements_idx = 0
 
     # Open file

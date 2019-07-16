@@ -8,6 +8,8 @@ My goal is to improve whiski in the following ways:
 3. Make it more cross-platform and memory-efficient, by converting whiski's output files into HDF5 files which can be read by multiple programs (Python, Matlab) on any operating system. Importantly, HDF5 files can also be read partially to avoid overflowing your system's memory.
 
 ## Example
+Note: The current best pipeline for running trace is `interleaved_reading_and_trace`, but the command `pipeline_trace` is the only one configured to run measure.
+
 First start the interactive python environment by typing ipython at the terminal.
 
 Import WhiskiWrap so it can be used:
@@ -50,8 +52,12 @@ This just reads the "summary": the tip and follicle of every whisker in every fr
 
 The following parameters must be chosen:
 * `n_trace_processes` - the number of parallel instances of `trace` to run at the same time. The most efficient choice is the number of CPUs on your system.
-* `epoch_size` - the number of frames per epoch. It is most efficient to make this value as large as possible. However, it should not be so large that you run out of memory when reading in the entire epoch of video. 100000 is a reasonable choice.
-* `chunk_size` - the size of each chunk. Ideally, this should be `epoch_size` / `n_trace_processes`, so that all the processes complete at about the same time. It could also be `epoch_size` / (N * `n_trace_processes`) where N is an integer.
+* `epoch_sz_frames` - the number of frames per epoch. It is most efficient to make this value as large as possible. However, it should not be so large that you run out of memory when reading in the entire epoch of video. 100000 is a reasonable choice.
+* `chunk_sz_frames` - the size of each chunk. Ideally, this should be `epoch_size` / `n_trace_processes`, so that all the processes complete at about the same time. It could also be `epoch_size` / (N * `n_trace_processes`) where N is an integer.
+
+You may also add optional parameters to run the measure command
+* `measure=True` - run measure command, default is False
+* `face='right'` - run measure with face on right side, can also specify to 'left' side
 
 # Installation
 WhiskiWrap is written in Python and relies on `ffmpeg` for reading input videos, `tifffile` for writing tiff stacks, `whiski` for tracing whiskers in the tiff stacks, and `pytables` for creating HDF5 files with all of the results.
@@ -65,13 +71,13 @@ Next install [`whiski`](http://whiskertracking.janelia.org). There are several w
 1. Download the pre-built binary. This is the easiest path because it doesn't require compiling anything. However, you still need to make a few changes to the Python code that is downloaded in order to make it work with `WhiskiWrap`.
 2. Build `whiski` from source, using my lightly customized fork. This will probably require more trouble-shooting to make sure all of its parts are working.
 
-To use the pre-built binary:
+To use the pre-built binary (preferred):
 
-1. Download the [zipped binary](http://whiskertracking.janelia.org/wiki/display/MyersLab/Whisker+Tracking+Downloads) and unpack it. Rename the unpacked directory to `~/dev/whisk`
+1. Download the [zipped binary](http://whiskertracking.janelia.org/wiki/display/MyersLab/Whisker+Tracking+Downloads) and unpack it or get the file whisk-1.1.0d-64bit-Linux.tar.gz from someone. Unpack with `tar -xzf whisk-1.1.0d-64bit-Linux.tar.gz`. Rename the unpacked directory to `~/dev/whisk`
 2. Add the binaries to your system path so that you can run `trace` from the command line.
 3. Add a few files to make `whiski`'s Python code work more nicely with other packages. (Technically, we need to make it a module, and avoid name collisions with the unrelated built-in module `trace`.)
-4. `touch ~/whisk/share/whisk/__init__.py`
-5. `touch ~/whisk/share/whisk/python/__init__.py`
+4. `touch ~/dev/whisk/share/whisk/__init__.py`
+5. `touch ~/dev/whisk/share/whisk/python/__init__.py`
 6. Add these modules to your Python path.
 7. `ln -s ~/dev/whisk/share/whisk/python ~/dev/whisk/python`
 8. or `echo "~/whisk/share" >> "~/.local/lib/python2.7/site-packages/whiski_wrap.pth`
@@ -94,14 +100,25 @@ To build from source:
 ## Installing Python modules
 Here I outline the use of `conda` to manage and install Python modules. In the long run this is the easiest way. Unfortunately it doesn't work well with user-level `pip`. Specifically, you should not have anything on your `$PYTHONPATH`, and there shouldn't be any installed modules in your `~/.local`.
 
+0. Clone my into ~/dev for video processing functions.
+```
+cd ~/dev
+git clone https://github.com/cxrodgers/my.git
+```
+
+0.5. Install scipy.
+`conda install scipy`
+
 1. Create a new conda environment for WhiskiWrap.
 
-`conda create -n whiski_wrap python=2.7 pip numpy matplotlib pyqt tables pandas ipython`
+`conda create -n whiski_wrap python=2.7 pip numpy matplotlib pyqt pytables pandas ipython`
 2. Activate that environment and install `tifffile`
 ```
 source activate whiski_wrap
 pip install tifffile
 ```
+If `source activate whiski_wrap` doesn't work, try `conda activate whiski_wrap`
+
 3. Clone WhiskiWrap
 ```
 cd ~/dev

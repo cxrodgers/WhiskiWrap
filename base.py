@@ -328,10 +328,10 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start, measuremen
                 h5seg['angle'] = measurements[measurements_idx][5]
                 h5seg['curvature'] = measurements[measurements_idx][6]
                 h5seg['pixlen'] = len(wseg.x)
-		h5seg['fol_x'] = measurements[measurements_idx][7] 
-		h5seg['fol_y'] = measurements[measurements_idx][8]
-		h5seg['tip_x'] = measurements[measurements_idx][9]
-		h5seg['tip_y'] = measurements[measurements_idx][10]
+                h5seg['fol_x'] = measurements[measurements_idx][7] 
+                h5seg['fol_y'] = measurements[measurements_idx][8]
+                h5seg['tip_x'] = measurements[measurements_idx][9]
+                h5seg['tip_y'] = measurements[measurements_idx][10]
 
 
                 measurements_idx += 1

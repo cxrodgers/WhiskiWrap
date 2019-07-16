@@ -1,12 +1,14 @@
 """Main functions for running input videos through trace.
 
-The overall algorithm is contained in 'pipeline_trace'. Briefly, the input
-video is first broken into large epochs, each of which should be small enough
-to fit in available memory. Each epoch is then broken into many non-overlapping
-chunks. Each chunk is written to disk as a tiff stack, and parallel
-instances of 'trace' are called on each chunk. Finally, the results from
-each chunk are loaded and combined into a single large HDF5 file for the
-entire video.
+The overall algorithm is contained in `interleaved_reading_and_tracing`. 
+* The input can be a video file or a directory of PF files.
+* Chunks of ~200 frames are read using ffmpeg, and then written to disk
+  as uncompressed tiff stacks.
+* Trace is called in parallel on each tiff stack
+* Additional chunks are read as trace completes.
+* At the end, all of the HDF5 files are stitched together.
+
+The previous function `pipeline_trace` is now deprecated.
 """
 
 try:
@@ -351,6 +353,10 @@ def pipeline_trace(input_vfile, h5_filename,
     n_trace_processes=4, expectedrows=1000000, flush_interval=100000,
     measure=False,face='right'):
     """Trace a video file using a chunked strategy.
+    
+    This is now deprecated in favor of interleaved_reading_and_tracing.
+    The issue with this function is that it has to write out all of the tiffs
+    first, before tracing, which is a wasteful use of disk space.
     
     input_vfile : input video filename
     h5_filename : output HDF5 file
@@ -1011,6 +1017,8 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
     monitor_video : filename for a monitor video
         If None, no monitor video will be written
     monitor_video_kwargs : kwargs to pass to FFmpegWriter for monitor
+        If None, the default is {'qp': 15} for a high-fidelity compression
+        that is still ~6x smaller than lossless.
     write_monitor_ffmpeg_stderr_to_screen : whether to display
         output from ffmpeg writing instance
     frame_func : function to apply to each frame
@@ -1023,7 +1031,7 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
     """
     ## Set up kwargs
     if monitor_video_kwargs is None:
-        monitor_video_kwargs = {}
+        monitor_video_kwargs = {'qp': 15}
     
     if frame_func == 'invert':
         frame_func = lambda frame: 255 - frame
@@ -1083,8 +1091,13 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
     # Also write timestamps as numpy file
     if hasattr(input_reader, 'timestamps') and timestamps_filename is not None:
         timestamps = np.concatenate(input_reader.timestamps)
-        assert len(timestamps) == nframes_written
-        assert nframes_written == nframe
+
+        # These assertions only make sense if we wrote the whole file
+        if stop_after_frame is None:
+            assert len(timestamps) == nframes_written
+            assert nframes_written == nframe
+        
+        # Save timestamps
         np.save(timestamps_filename, timestamps)
 
     return {
@@ -1095,7 +1108,8 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
 
 class PFReader:
     """Reads photonfocus modulated data stored in matlab files"""
-    def __init__(self, input_directory, n_threads=4, verbose=True):
+    def __init__(self, input_directory, n_threads=4, verbose=True, 
+        error_on_unsorted_filetimes=True):
         """Initialize a new reader.
         
         input_directory : where the mat files are
@@ -1103,6 +1117,12 @@ class PFReader:
             They should contain variables called 'img' (a 4d array of
             modulated frames) and 't' (timestamps of each frame).
         n_threads : sent to pfDoubleRate_SetNrOfThreads
+        
+        error_on_unsorted_filetimes : bool
+            Whether to raise an error if the modification times of the 
+            matfiles are not in sorted order, which typically happens if
+            something has gone wrong (but could just be that the file times
+            weren't preserved)
         """
         self.input_directory = input_directory
         self.verbose = verbose
@@ -1138,6 +1158,16 @@ class PFReader:
             self.matfile_ordering]
         self.sorted_matfile_numbers = np.array(self.matfile_numbers)[
             self.matfile_ordering]
+
+        # Error check the file times
+        filetimes = np.array([
+            my.misc.get_file_time(filename)
+            for filename in self.sorted_matfile_names])
+        if (np.diff(filetimes) < 0).any():
+            if error_on_unsorted_filetimes:
+                raise IOError("unsorted matfiles")
+            else:
+                print "warning: unsorted matfiles"
         
         # Create variable to store timestamps
         self.timestamps = []
@@ -1308,7 +1338,7 @@ class FFmpegReader:
     """Reads frames from a video file using ffmpeg process"""
     def __init__(self, input_filename, pix_fmt='gray', bufsize=10**9,
         duration=None, start_frame_time=None, start_frame_number=None,
-        write_stderr_to_screen=False):
+        write_stderr_to_screen=False, vsync='drop'):
         """Initialize a new reader
         
         input_filename : name of file
@@ -1349,6 +1379,7 @@ class FFmpegReader:
         
         command += [
             '-i', input_filename,
+            '-vsync', vsync,
             '-f', 'image2pipe',
             '-pix_fmt', pix_fmt]
         
@@ -1435,7 +1466,8 @@ class FFmpegReader:
 class FFmpegWriter:
     """Writes frames to an ffmpeg compression process"""
     def __init__(self, output_filename, frame_width, frame_height,
-        output_fps=30, vcodec='libx264', pix_fmt='gray', qp=15, preset='medium',
+        output_fps=30, vcodec='libx264', qp=15, preset='medium',
+        input_pix_fmt='gray', output_pix_fmt='yuv420p', 
         write_stderr_to_screen=False):
         """Initialize the ffmpeg writer
         
@@ -1443,8 +1475,9 @@ class FFmpegWriter:
         frame_width, frame_height : Used to inform ffmpeg how to interpret
             the data coming in the stdin pipe
         output_fps : frame rate
-        pix_fmt : Tell ffmpeg how to interpret the raw data on the pipe
+        input_pix_fmt : Tell ffmpeg how to interpret the raw data on the pipe
             This should match the output generated by frame.tostring()
+        output_pix_fmt : pix_fmt of the output
         crf : quality. 0 means lossless
         preset : speed/compression tradeoff
         write_stderr_to_screen :
@@ -1462,8 +1495,9 @@ class FFmpegWriter:
         cmdstring = ('ffmpeg', 
             '-y', '-r', '%d' % output_fps,
             '-s', '%dx%d' % (frame_width, frame_height), # size of image string
-            '-pix_fmt', pix_fmt, # format
+            '-pix_fmt', input_pix_fmt,
             '-f', 'rawvideo',  '-i', '-', # raw video from the pipe
+            '-pix_fmt', output_pix_fmt,
             '-vcodec', vcodec,
             '-qp', str(qp), 
             '-preset', preset,
@@ -1490,3 +1524,11 @@ class FFmpegWriter:
 
 def measure_chunk_star(args):
     return measure_chunk(*args)
+
+
+def read_whiskers_hdf5_summary(filename):
+    """Reads and returns the `summary` table in an HDF5 file"""
+    with tables.open_file(filename) as fi:
+        summary = pandas.DataFrame.from_records(fi.root.summary.read())
+    
+    return summary

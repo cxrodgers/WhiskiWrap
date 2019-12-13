@@ -38,5 +38,4 @@ from . import base
 from . import tests
 #import video_utils
 from . import utils
-reload(base)
 from .base import *

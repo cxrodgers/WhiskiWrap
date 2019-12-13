@@ -10,6 +10,7 @@ of how to choose parameters and trace input videos.
 from __future__ import print_function
 
 
+from builtins import input
 import os
 import numpy as np
 import tables
@@ -40,7 +41,7 @@ def setup_session_directory(directory, input_video, force=False):
         
         # Get user confirmation
         if not force:
-            confirm = raw_input('Ok to erase %s? [y/N]: ' % directory)
+            confirm = input('Ok to erase %s? [y/N]: ' % directory)
             if confirm.upper() != 'Y':
                 raise ValueError("did not receive permission to setup test")
         
@@ -198,7 +199,7 @@ def run_offset_test(test_root='~/whiski_wrap_test', start=1525, offset=5,
 
 def get_permission_for_test_root(test_root):
     """Ask for permission to run in test_root"""
-    response = raw_input('Run tests in %s? [y/N]: ' % test_root)
+    response = input('Run tests in %s? [y/N]: ' % test_root)
     if response.upper() != 'Y':
         raise ValueError("did not receive permission to run test")   
 

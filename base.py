@@ -12,6 +12,11 @@ The previous function `pipeline_trace` is now deprecated.
 """
 from __future__ import print_function
 
+from builtins import zip
+from builtins import map
+from builtins import str
+from builtins import range
+from builtins import object
 try:
     import tifffile
 except ImportError:
@@ -296,7 +301,7 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start, measuremen
     print(whisk_filename)
     
     whiskers = trace.Load_Whiskers(whisk_filename)
-    nwhisk = np.sum(map(len, whiskers.values()))
+    nwhisk = np.sum(list(map(len, list(whiskers.values()))))
 
     if measurements_filename is not None:
         print(measurements_filename)
@@ -312,8 +317,8 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start, measuremen
     h5seg = table.row
     xpixels_vlarray = h5file.get_node('/pixels_x')
     ypixels_vlarray = h5file.get_node('/pixels_y')
-    for frame, frame_whiskers in whiskers.iteritems():
-        for whisker_id, wseg in frame_whiskers.iteritems():
+    for frame, frame_whiskers in whiskers.items():
+        for whisker_id, wseg in frame_whiskers.items():
             # Write to the table
             h5seg['chunk_start'] = chunk_start
             h5seg['time'] = wseg.time + chunk_start
@@ -438,7 +443,7 @@ def pipeline_trace(input_vfile, h5_filename,
             print("Measuring")
             pool = multiprocessing.Pool(n_trace_processes)
             meas_res = pool.map(measure_chunk_star, 
-                itertools.izip([os.path.join(input_dir, whisk_name)
+                zip([os.path.join(input_dir, whisk_name)
                     for whisk_name in whisk_names],itertools.repeat(face)))
             pool.close()
         
@@ -540,7 +545,7 @@ def trace_chunked_tiffs(input_tiff_directory, h5_filename,
     tif_full_filenames = [
         os.path.join(input_tiff_directory, 'chunk%s.tif' % fns)
         for fns in tif_file_number_strings]
-    tif_file_numbers = map(int, tif_file_number_strings)
+    tif_file_numbers = list(map(int, tif_file_number_strings))
     tif_ordering = np.argsort(tif_file_numbers)
     tif_sorted_filenames = np.array(tif_full_filenames)[
         tif_ordering]
@@ -743,7 +748,7 @@ def interleaved_read_trace_and_measure(input_reader, tiffs_to_trace_directory,
     tif_full_filenames = [
         os.path.join(tiffs_to_trace_directory, 'chunk%s.tif' % fns)
         for fns in tif_file_number_strings]
-    tif_file_numbers = map(int, tif_file_number_strings)
+    tif_file_numbers = list(map(int, tif_file_number_strings))
     tif_ordering = np.argsort(tif_file_numbers)
     tif_sorted_filenames = np.array(tif_full_filenames)[
         tif_ordering]
@@ -753,7 +758,7 @@ def interleaved_read_trace_and_measure(input_reader, tiffs_to_trace_directory,
     # stitch
     if not skip_stitch:
         print("Stitching")
-        zobj = zip(tif_sorted_file_numbers, tif_sorted_filenames)
+        zobj = list(zip(tif_sorted_file_numbers, tif_sorted_filenames))
         for chunk_start, chunk_name in zobj:
             # Append each chunk to the hdf5 file
             fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(chunk_name)
@@ -963,7 +968,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     tif_full_filenames = [
         os.path.join(tiffs_to_trace_directory, 'chunk%s.tif' % fns)
         for fns in tif_file_number_strings]
-    tif_file_numbers = map(int, tif_file_number_strings)
+    tif_file_numbers = list(map(int, tif_file_number_strings))
     tif_ordering = np.argsort(tif_file_numbers)
     tif_sorted_filenames = np.array(tif_full_filenames)[
         tif_ordering]
@@ -973,7 +978,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     # stitch
     if not skip_stitch:
         print("Stitching")
-        zobj = zip(tif_sorted_file_numbers, tif_sorted_filenames)
+        zobj = list(zip(tif_sorted_file_numbers, tif_sorted_filenames))
         for chunk_start, chunk_name in zobj:
             # Append each chunk to the hdf5 file
             fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(chunk_name)
@@ -1107,7 +1112,7 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
     }
     
 
-class PFReader:
+class PFReader(object):
     """Reads photonfocus modulated data stored in matlab files"""
     def __init__(self, input_directory, n_threads=4, verbose=True, 
         error_on_unsorted_filetimes=True):
@@ -1151,7 +1156,7 @@ class PFReader:
         self.matfile_names = [
             os.path.join(self.input_directory, 'img%s.mat' % fns)
             for fns in self.matfile_number_strings]
-        self.matfile_numbers = map(int, self.matfile_number_strings)
+        self.matfile_numbers = list(map(int, self.matfile_number_strings))
         self.matfile_ordering = np.argsort(self.matfile_numbers)
 
         # Sort the names and numbers
@@ -1279,7 +1284,7 @@ class PFReader:
     def isclosed(self):
         return True
 
-class ChunkedTiffWriter:
+class ChunkedTiffWriter(object):
     """Writes frames to a series of tiff stacks"""
     def __init__(self, output_directory, chunk_size=200,
         chunk_name_pattern='chunk%08d.tif'):
@@ -1335,7 +1340,7 @@ class ChunkedTiffWriter:
         """Finish writing any final unfinished chunk"""
         self._write_chunk()
 
-class FFmpegReader:
+class FFmpegReader(object):
     """Reads frames from a video file using ffmpeg process"""
     def __init__(self, input_filename, pix_fmt='gray', bufsize=10**9,
         duration=None, start_frame_time=None, start_frame_number=None,
@@ -1464,7 +1469,7 @@ class FFmpegReader:
             # Never even ran? I guess this counts as closed.
             return True
 
-class FFmpegWriter:
+class FFmpegWriter(object):
     """Writes frames to an ffmpeg compression process"""
     def __init__(self, output_filename, frame_width, frame_height,
         output_fps=30, vcodec='libx264', qp=15, preset='medium',

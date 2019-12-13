@@ -8,6 +8,7 @@ system commands: ffmpeg, trace.
 """
 from __future__ import print_function
 
+from builtins import object
 import os
 import subprocess
 

@@ -4,6 +4,9 @@ process_chunks_of_video : used in this module to load an input video with
     ffmpeg and dump tiff stacks to disk of each chunk.
 """
 from __future__ import print_function
+from __future__ import division
+from builtins import map
+from past.utils import old_div
 import os
 import numpy as np
 import subprocess
@@ -143,7 +146,7 @@ def process_chunks_of_video(filename,
             if len(raw_image) < read_size_per_frame * this_chunk:
                 print("warning: ran out of frames")
                 out_of_frames = True
-                this_chunk = len(raw_image) / read_size_per_frame
+                this_chunk = old_div(len(raw_image), read_size_per_frame)
                 assert this_chunk * read_size_per_frame == len(raw_image)
             
             # Process
@@ -159,7 +162,7 @@ def process_chunks_of_video(filename,
             # We make it an array again, but note this can lead to 
             # dtype and shape problems later for some frame_func
             if frame_func is not None:
-                chunk_res = np.asarray(map(frame_func, video))
+                chunk_res = np.asarray(list(map(frame_func, video)))
             else:
                 chunk_res = video
             

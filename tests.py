@@ -7,6 +7,7 @@ The function run_standard_benchmarks goes through a suite of tests. This
 tests that everything is working properly and also serves as an example
 of how to choose parameters and trace input videos.
 """
+from __future__ import print_function
 
 
 import os
@@ -80,7 +81,7 @@ def run_benchmarks(benchmark_params, test_root, force=False):
     test_results = {}
     durations = []    
     for idx, test in benchmark_params.iterrows():
-        print test['name']
+        print(test['name'])
         test_dir = os.path.expanduser(os.path.join(test_root, test['name']))
         fn = setup_session_directory(test_dir, test['input_video'], force=force)
 

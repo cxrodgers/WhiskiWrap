@@ -3,6 +3,7 @@
 process_chunks_of_video : used in this module to load an input video with
     ffmpeg and dump tiff stacks to disk of each chunk.
 """
+from __future__ import print_function
 import os
 import numpy as np
 import subprocess
@@ -128,7 +129,7 @@ def process_chunks_of_video(filename,
         out_of_frames = False
         while frames_read < n_frames and not out_of_frames:
             if verbose:
-                print frames_read
+                print(frames_read)
             # Figure out how much to acquire
             if frames_read + frames_per_chunk > n_frames:
                 this_chunk = n_frames - frames_read
@@ -140,7 +141,7 @@ def process_chunks_of_video(filename,
             
             # check if we ran out of frames
             if len(raw_image) < read_size_per_frame * this_chunk:
-                print "warning: ran out of frames"
+                print("warning: ran out of frames")
                 out_of_frames = True
                 this_chunk = len(raw_image) / read_size_per_frame
                 assert this_chunk * read_size_per_frame == len(raw_image)
@@ -191,7 +192,7 @@ def process_chunks_of_video(filename,
 
     # Stick chunks together
     if len(res_l) == 0:
-        print "warning: no data found"
+        print("warning: no data found")
         res = np.array([])
     elif finalize == 'concatenate':
         res = np.concatenate(res_l)
@@ -200,7 +201,7 @@ def process_chunks_of_video(filename,
     elif finalize == 'list':
         res = res_l
     else:
-        print "warning: unknown finalize %r" % finalize
+        print("warning: unknown finalize %r" % finalize)
         res = res_l
         
     return res

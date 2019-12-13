@@ -6,6 +6,7 @@ not really mandatory but is used by the pipeline_trace function in base.
 The other utility functions are for probing the availability of needed
 system commands: ffmpeg, trace.
 """
+from __future__ import print_function
 
 import os
 import subprocess
@@ -51,17 +52,17 @@ class FileNamer(object):
     def from_video(self, video_name):
         """Generates FileNamer based on an existing video name"""
         if not os.path.exists(video_name):
-            print "warning: nonexistent video %s" % video_name
+            print("warning: nonexistent video %s" % video_name)
         basename, ext = os.path.splitext(video_name)
         if ext not in ['.mp4', '.avi', '.mkv', '.tif']:
-            print "warning: %s does not appear to be a video file" % video_name
+            print("warning: %s does not appear to be a video file" % video_name)
         return FileNamer(basename)
 
     @classmethod
     def from_whiskers(self, whiskers_file_name):
         """Generates FileNamer based on an existing whiskers file"""
         if not os.path.exists(whiskers_file_name):
-            print "warning: nonexistent whiskers file %s" % whiskers_file_name        
+            print("warning: nonexistent whiskers file %s" % whiskers_file_name)        
         basename, ext = os.path.splitext(whiskers_file_name)
         if ext != '.whiskers':
             raise ValueError("%s is not a whiskers file" % whiskers_file_name)
@@ -133,7 +134,7 @@ def probe_needed_commands():
     if not ffmpeg_av[0]:
         raise OSError("'ffmpeg' is not available on the system path")    
     if 'the FFmpeg developers' not in ffmpeg_av[2].split('\n')[0]:
-        print "warning: libav ffmpeg appears to be installed"
+        print("warning: libav ffmpeg appears to be installed")
     
     trace_av = probe_command_availability('trace')
     if not trace_av[0]:

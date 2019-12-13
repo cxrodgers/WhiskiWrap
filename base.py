@@ -10,6 +10,7 @@ The overall algorithm is contained in `interleaved_reading_and_tracing`.
 
 The previous function `pipeline_trace` is now deprecated.
 """
+from __future__ import print_function
 
 try:
     import tifffile
@@ -24,7 +25,7 @@ try:
     from whisk.python import trace
     from whisk.python.traj import MeasurementsTable
 except ImportError:
-    print "cannot import whisk"
+    print("cannot import whisk")
 import pandas
 import WhiskiWrap
 from WhiskiWrap import video_utils
@@ -103,7 +104,7 @@ def trace_chunk(video_filename, delete_when_done=False):
     Returns:
         stdout, stderr
     """
-    print "Starting", video_filename
+    print("Starting", video_filename)
     orig_dir = os.getcwd()
     run_dir, raw_video_filename = os.path.split(os.path.abspath(video_filename))
     whiskers_file = WhiskiWrap.utils.FileNamer.from_video(video_filename).whiskers
@@ -120,10 +121,10 @@ def trace_chunk(video_filename, delete_when_done=False):
         raise
     finally:
         os.chdir(orig_dir)
-    print "Done", video_filename
+    print("Done", video_filename)
     
     if not os.path.exists(whiskers_file):
-        print raw_video_filename
+        print(raw_video_filename)
         raise IOError("tracing seems to have failed")
 
     if delete_when_done:
@@ -144,7 +145,7 @@ def measure_chunk(whiskers_filename, face, delete_when_done=False):
     Returns:
         stdout, stderr
     """
-    print "Starting", whiskers_filename
+    print("Starting", whiskers_filename)
     orig_dir = os.getcwd()
     run_dir, raw_whiskers_filename = os.path.split(os.path.abspath(whiskers_filename))
     measurements_file = WhiskiWrap.utils.FileNamer.from_whiskers(whiskers_filename).measurements
@@ -161,10 +162,10 @@ def measure_chunk(whiskers_filename, face, delete_when_done=False):
         raise
     finally:
         os.chdir(orig_dir)
-    print "Done", whiskers_filename
+    print("Done", whiskers_filename)
     
     if not os.path.exists(measurements_file):
-        print raw_whiskers_filename
+        print(raw_whiskers_filename)
         raise IOError("measurement seems to have failed")
 
     if delete_when_done:
@@ -185,7 +186,7 @@ def trace_and_measure_chunk(video_filename, delete_when_done=False, face='right'
     Returns:
         stdout, stderr
     """
-    print "Starting", video_filename
+    print("Starting", video_filename)
     
     orig_dir = os.getcwd()
     run_dir, raw_video_filename = os.path.split(os.path.abspath(video_filename))
@@ -205,10 +206,10 @@ def trace_and_measure_chunk(video_filename, delete_when_done=False, face='right'
         raise
     finally:
         os.chdir(orig_dir)
-    print "Done", video_filename
+    print("Done", video_filename)
     
     if not os.path.exists(whiskers_file):
-        print raw_video_filename
+        print(raw_video_filename)
         raise IOError("tracing seems to have failed")
 
     # Run measure:
@@ -226,10 +227,10 @@ def trace_and_measure_chunk(video_filename, delete_when_done=False, face='right'
         raise
     finally:
         os.chdir(orig_dir)
-    print "Done", whiskers_file
+    print("Done", whiskers_file)
     
     if not os.path.exists(measurements_file):
-        print whiskers_file
+        print(whiskers_file)
         raise IOError("measuring seems to have failed")
 
     # Clean up:    
@@ -240,7 +241,7 @@ def trace_and_measure_chunk(video_filename, delete_when_done=False, face='right'
 
 
 def sham_trace_chunk(video_filename):
-    print "sham tracing", video_filename
+    print("sham tracing", video_filename)
     time.sleep(2)
     return video_filename
 
@@ -292,13 +293,13 @@ def append_whiskers_to_hdf5(whisk_filename, h5_filename, chunk_start, measuremen
     # The python object responds to .time and .id (integers) and .x and .y (numpy
     # float arrays).
     #wv, nwhisk = trace.Debug_Load_Whiskers(whisk_filename)
-    print whisk_filename
+    print(whisk_filename)
     
     whiskers = trace.Load_Whiskers(whisk_filename)
     nwhisk = np.sum(map(len, whiskers.values()))
 
     if measurements_filename is not None:
-        print measurements_filename
+        print(measurements_filename)
         M = MeasurementsTable(str(measurements_filename))
         measurements = M.asarray()
         measurements_idx = 0
@@ -386,14 +387,14 @@ def pipeline_trace(input_vfile, h5_filename,
     if frame_stop is None:
         frame_stop = total_frames
     if frame_stop > total_frames:
-        print "too many frames requested, truncating"
+        print("too many frames requested, truncating")
         frame_stop = total_frames
     
     # Iterate over epochs
     for start_epoch in range(frame_start, frame_stop, epoch_sz_frames):
         # How many frames in this epoch
         stop_epoch = np.min([frame_stop, start_epoch + epoch_sz_frames])
-        print "Epoch %d - %d" % (start_epoch, stop_epoch)
+        print("Epoch %d - %d" % (start_epoch, stop_epoch))
         
         # Chunks
         chunk_starts = np.arange(start_epoch, stop_epoch, chunk_sz_frames)
@@ -403,7 +404,7 @@ def pipeline_trace(input_vfile, h5_filename,
 
         # read everything
         # need to be able to crop here
-        print "Reading"
+        print("Reading")
         frames = video_utils.process_chunks_of_video(input_vfile, 
             frame_start=start_epoch, frame_stop=stop_epoch,
             frames_per_chunk=chunk_sz_frames, # only necessary for chunk_func
@@ -411,21 +412,21 @@ def pipeline_trace(input_vfile, h5_filename,
             verbose=False, finalize='listcomp')
 
         # Dump frames into tiffs or lossless
-        print "Writing"
+        print("Writing")
         for n_whiski_chunk, chunk_name in enumerate(chunk_names):
-            print n_whiski_chunk
+            print(n_whiski_chunk)
             chunkstart = n_whiski_chunk * chunk_sz_frames
             chunkstop = (n_whiski_chunk + 1) * chunk_sz_frames
             chunk = frames[chunkstart:chunkstop]
             if len(chunk) in [3, 4]:
-                print "WARNING: trace will fail on tiff stacks of length 3 or 4"
+                print("WARNING: trace will fail on tiff stacks of length 3 or 4")
             write_chunk(chunk, chunk_name, input_dir)
         
         # Also write lossless and/or lossy monitor video here?
         # would really only be useful if cropping applied
 
         # trace each
-        print "Tracing"
+        print("Tracing")
         pool = multiprocessing.Pool(n_trace_processes)        
         trace_res = pool.map(trace_chunk, 
             [os.path.join(input_dir, chunk_name)
@@ -434,7 +435,7 @@ def pipeline_trace(input_vfile, h5_filename,
 
         # take measurements:
         if measure:
-            print "Measuring"
+            print("Measuring")
             pool = multiprocessing.Pool(n_trace_processes)
             meas_res = pool.map(measure_chunk_star, 
                 itertools.izip([os.path.join(input_dir, whisk_name)
@@ -443,7 +444,7 @@ def pipeline_trace(input_vfile, h5_filename,
         
 
         # stitch
-        print "Stitching"
+        print("Stitching")
         for chunk_start, chunk_name in zip(chunk_starts, chunk_names):
             # Append each chunk to the hdf5 file
             fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(
@@ -547,13 +548,13 @@ def trace_chunked_tiffs(input_tiff_directory, h5_filename,
         tif_ordering]
 
     # trace each
-    print "Tracing"
+    print("Tracing")
     pool = multiprocessing.Pool(n_trace_processes)        
     trace_res = pool.map(trace_chunk, tif_sorted_filenames)
     pool.close()
     
     # stitch
-    print "Stitching"
+    print("Stitching")
     for chunk_start, chunk_name in zip(tif_sorted_file_numbers, tif_sorted_filenames):
         # Append each chunk to the hdf5 file
         fn = WhiskiWrap.utils.FileNamer.from_tiff_stack(chunk_name)
@@ -619,7 +620,7 @@ def interleaved_read_trace_and_measure(input_reader, tiffs_to_trace_directory,
     
     ## Initialize readers and writers
     if verbose:
-        print "initalizing readers and writers"
+        print("initalizing readers and writers")
     # Tiff writer
     ctw = WhiskiWrap.ChunkedTiffWriter(tiffs_to_trace_directory,
         chunk_size=chunk_size, chunk_name_pattern=chunk_name_pattern)
@@ -654,7 +655,7 @@ def interleaved_read_trace_and_measure(input_reader, tiffs_to_trace_directory,
     while not out_of_frames:
         # Get a chunk of frames
         if verbose:
-            print "loading chunk of frames starting with ", nframe
+            print("loading chunk of frames starting with ", nframe)
         chunk_of_frames = []
         for frame in iter_obj:
             if frame_func is not None:
@@ -712,12 +713,12 @@ def interleaved_read_trace_and_measure(input_reader, tiffs_to_trace_directory,
         
         ## Determine if we should pause
         while len(ctw.chunknames_written) > len(trace_pool_results) + 2 * n_trace_processes:
-            print "waiting for tracing to catch up"
+            print("waiting for tracing to catch up")
             time.sleep(30)
     
     ## Wait for trace to complete
     if verbose:
-        print "done with reading and writing, just waiting for tracing"
+        print("done with reading and writing, just waiting for tracing")
     # Tell it no more jobs, so close when done
     trace_pool.close()
     
@@ -751,7 +752,7 @@ def interleaved_read_trace_and_measure(input_reader, tiffs_to_trace_directory,
     
     # stitch
     if not skip_stitch:
-        print "Stitching"
+        print("Stitching")
         zobj = zip(tif_sorted_file_numbers, tif_sorted_filenames)
         for chunk_start, chunk_name in zobj:
             # Append each chunk to the hdf5 file
@@ -839,7 +840,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     
     ## Initialize readers and writers
     if verbose:
-        print "initalizing readers and writers"
+        print("initalizing readers and writers")
     # Tiff writer
     ctw = WhiskiWrap.ChunkedTiffWriter(tiffs_to_trace_directory,
         chunk_size=chunk_size, chunk_name_pattern=chunk_name_pattern)
@@ -874,7 +875,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     while not out_of_frames:
         # Get a chunk of frames
         if verbose:
-            print "loading chunk of frames starting with ", nframe
+            print("loading chunk of frames starting with ", nframe)
         chunk_of_frames = []
         for frame in iter_obj:
             if frame_func is not None:
@@ -932,12 +933,12 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
         
         ## Determine if we should pause
         while len(ctw.chunknames_written) > len(trace_pool_results) + 2 * n_trace_processes:
-            print "waiting for tracing to catch up"
+            print("waiting for tracing to catch up")
             time.sleep(30)
     
     ## Wait for trace to complete
     if verbose:
-        print "done with reading and writing, just waiting for tracing"
+        print("done with reading and writing, just waiting for tracing")
     # Tell it no more jobs, so close when done
     trace_pool.close()
     
@@ -971,7 +972,7 @@ def interleaved_reading_and_tracing(input_reader, tiffs_to_trace_directory,
     
     # stitch
     if not skip_stitch:
-        print "Stitching"
+        print("Stitching")
         zobj = zip(tif_sorted_file_numbers, tif_sorted_filenames)
         for chunk_start, chunk_name in zobj:
             # Append each chunk to the hdf5 file
@@ -1038,7 +1039,7 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
     
     ## Initialize readers and writers
     if verbose:
-        print "initalizing readers and writers"
+        print("initalizing readers and writers")
 
     # FFmpeg writer is initalized after first frame
     ffw = None
@@ -1054,7 +1055,7 @@ def compress_pf_to_video(input_reader, chunk_size=200, stop_after_frame=None,
     while not out_of_frames:
         # Get a chunk of frames
         if verbose:
-            print "loading chunk of frames starting with ", nframe
+            print("loading chunk of frames starting with ", nframe)
         chunk_of_frames = []
         for frame in iter_obj:
             if frame_func is not None:
@@ -1167,7 +1168,7 @@ class PFReader:
             if error_on_unsorted_filetimes:
                 raise IOError("unsorted matfiles")
             else:
-                print "warning: unsorted matfiles"
+                print("warning: unsorted matfiles")
         
         # Create variable to store timestamps
         self.timestamps = []
@@ -1193,7 +1194,7 @@ class PFReader:
         # Iterate through matfiles and load
         for matfile_name in self.sorted_matfile_names:
             if self.verbose:
-                print "loading %s" % matfile_name
+                print("loading %s" % matfile_name)
             
             # Load the raw data
             # This is the slowest step
@@ -1212,8 +1213,8 @@ class PFReader:
             frame_height = matfile_modulated_data.shape[0]
             
             if self.verbose:
-                print "loaded %d modulated frames @ %dx%d" % (n_frames,
-                    modulated_frame_width, frame_height)
+                print("loaded %d modulated frames @ %dx%d" % (n_frames,
+                    modulated_frame_width, frame_height))
             
             # Find the demodulated width
             # This can be done by pfDoubleRate_GetDeModulatedWidth
@@ -1243,7 +1244,7 @@ class PFReader:
             # Iterate over frames
             for n_frame in range(n_frames):
                 if self.verbose and np.mod(n_frame, 200) == 0:
-                    print "iterator has reached frame %d" % n_frame
+                    print("iterator has reached frame %d" % n_frame)
                 
                 # Convert image to char array
                 # Ideally we would use a buffer here instead of a copy in order
@@ -1269,7 +1270,7 @@ class PFReader:
                 yield demodulated_frame
         
         if self.verbose:
-            print "iterator is empty"
+            print("iterator is empty")
     
     def close(self):
         """Currently does nothing"""

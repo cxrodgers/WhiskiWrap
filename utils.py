@@ -123,6 +123,12 @@ def probe_command_availability(cmd):
     except OSError:
         pass
     
+    # Decode
+    if stdout is not None:
+        stdout = stdout.decode('utf-8')
+    if stderr is not None:
+        stderr = stderr.decode('utf-8')
+    
     return command_available, stdout, stderr
 
 def probe_needed_commands():
